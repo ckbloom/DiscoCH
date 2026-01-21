@@ -1,0 +1,18 @@
+[project]
+name = "disco_ch"
+version = "0.0.1"
+authors = [
+  { name="Colin Bloom", email="colin.bloom@wsl.ch" },
+]
+description = "Applies a trained discoloration model to Sentinel-2 timeseries"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/ckb1oom/disco_ch"
