@@ -238,10 +238,11 @@ def new_image_check(date, existing_data_loc, stac_loc='https://data.geo.admin.ch
         return new_items, existing_meta, processed_dates
 
 
-def load_and_process_assets(assets, forest_mask, band_metadata=False):
+def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False):
     """
     Load bands from a STAC item or assets dict, align 20m → 10m, and return selected bands and valid mask.
 
+    :param bbox: (minx, miny, maxx, maxy)
     :param forest_mask:
     :param band_metadata:
     :param assets: A dict of assets
@@ -274,6 +275,12 @@ def load_and_process_assets(assets, forest_mask, band_metadata=False):
         bands_10m = rxr.open_rasterio(assets[bands_10m_key].href, masked=True, chunks={"x": 1024, "y": 1024})
         bands_20m = rxr.open_rasterio(assets[bands_20m_key].href, masked=True, chunks={"x": 1024, "y": 1024})
         masks = rxr.open_rasterio(assets[mask_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+
+        # Apply spatial subset
+        if bbox is not None:
+            bands_10m = bands_10m.rio.clip_box(*bbox)
+            bands_20m = bands_20m.rio.clip_box(*bbox)
+            masks = masks.rio.clip_box(*bbox)
 
         load_time = time.time()
         print(f'  Loaded Data and Masks in {load_time - tick:.2f} seconds')
@@ -338,9 +345,25 @@ def load_and_process_assets(assets, forest_mask, band_metadata=False):
     return bands, valid_mask
 
 
-def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, band_metadata=False):
+def build_template(national_template, bbox):
+    """
+    Build a nodata template raster for a given bounding box
+    using the provided national template.
+    """
+    # Load the national template
+    national_template = rxr.open_rasterio(national_template).squeeze(drop=True).astype("float32")
+
+    # Crop to the bounding box
+    bbox_template = national_template.rio.clip_box(*bbox)
+
+    return bbox_template
+
+
+def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bounding,
+                      band_metadata=False):
     """
     Updates (or creates) VI min max rasters and metadata
+    :param bounding:
     :param template:
     :param forest_mask:
     :param existing_data:
@@ -362,7 +385,7 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
 
         # Load the assets and extract relevant bands and masks
         assets = item.assets
-        bands, valid = load_and_process_assets(assets, drains_forest_mask, band_metadata=band_metadata)
+        bands, valid = load_and_process_assets(assets, drains_forest_mask, bounding, band_metadata=band_metadata)
 
         # Take care of occasional problems when loading assests (e.g., missing masks etc.)
         if bands is None:
@@ -454,7 +477,7 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
     return vi_min, vi_max
 
 
-def normalize_vis(closest_data, vi_min, vi_max, forest_mask):
+def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding):
     """
     Create and normalize vegetation indices by min and max
     :param forest_mask:
@@ -468,7 +491,7 @@ def normalize_vis(closest_data, vi_min, vi_max, forest_mask):
 
     assets = closest_data.assets
 
-    bands, valid = load_and_process_assets(assets, drains_forest_mask)
+    bands, valid = load_and_process_assets(assets, drains_forest_mask, bounding)
 
     # Take care of occasional problems when loading assests (e.g., missing masks etc.)
     if bands is None:

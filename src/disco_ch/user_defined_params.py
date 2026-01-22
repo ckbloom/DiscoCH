@@ -12,7 +12,7 @@ existing_data = r"B:/minmax_demo"
 forest_mask = r"data/demo/forest_mask_10m.tif"
 
 # Template raster with NaN extent (same resolution and CRS)
-ch_template = r"data/demo/novalue_extent.tif"
+ch_template = r"data/NoValue_CH_Extent.tif"
 
 # Output directory
 output_dir = r"output/demo"
@@ -22,3 +22,6 @@ disco_model = r"data/sen_disco_model/2025_03_12/SVC/empirical_model_pipeline_202
 
 # Optional saving of normalized VIs
 save_norm_vi = False
+
+# Bounding box for a region of interest (None for the full country)
+bounding_box = (2688769, 1286490, 2691176, 1288144)  # SH

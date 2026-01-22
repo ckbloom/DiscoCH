@@ -1,6 +1,7 @@
-from src.disco_ch import (new_image_check, load_minmax_rasters, update_vi_min_max, pull_closest_from_stac,
-                          normalize_vis)
-from src.disco_ch import apply_disco
+from src.disco_ch.stac_pull import (new_image_check, load_minmax_rasters, update_vi_min_max, pull_closest_from_stac,
+                                    normalize_vis, build_template)
+
+from src.disco_ch.apply_model_stac import apply_disco
 import os
 
 """
@@ -19,7 +20,7 @@ Define a date and file locations below and run the code to predict discoloration
 date_of_interest = '2018-08-18'
 
 # Local directory with existing data
-existing_data = r"B:\minmax"
+existing_data = r"B:\bloomc\minmax_demo"
 
 # If needed, modify the STAC location
 stac_location = 'https://data.geo.admin.ch/api/stac/v0.9/'
@@ -34,6 +35,8 @@ output = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\output"
 
 disco_model = (r'G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\sen_disco_model\2025_03_12\SVC'
                r'\empirical_model_pipeline_2025_6_2_1dfdb58bc3_dirty.pkl')
+
+bounding_box = (2688769, 1286490, 2691176, 1288144)  # SH
 
 save_norm_vi = False
 
@@ -53,6 +56,12 @@ if __name__ == '__main__':
     print('Checking for Min Max data')
     items_to_process, existing_meta, processed_dates = new_image_check(date_of_interest, existing_data, stac_location)
 
+    # Create a no data template for the region of interest
+    if bounding_box is not None:
+        template = build_template(ch_template, bounding_box)
+    else:
+        template = ch_template
+
     # If no new Min Max processing is needed, load vi min and max rasters
     if items_to_process is None:
         try:
@@ -62,7 +71,7 @@ if __name__ == '__main__':
 
     # Process new dates into annual Min Max VIs
     else:
-        update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, ch_template)
+        update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bounding_box)
         vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data)
 
     # Step 2: Normalize the closest raster to the date of interest
@@ -72,7 +81,7 @@ if __name__ == '__main__':
     closest_data = pull_closest_from_stac(date_of_interest, stac_location)
 
     # Normalize the data at the closest date
-    normalized_vis = normalize_vis(closest_data, vi_min, vi_max, forest_mask)
+    normalized_vis = normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding_box)
 
     if save_norm_vi:
         for vi_name, da in normalized_vis.items():

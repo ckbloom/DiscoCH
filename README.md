@@ -14,7 +14,7 @@ Load the Jupyter Notebook in the notebooks directory for a demonstration.
 Clone the repository and install the environment using the provided YAML:
 ```bash
 git clone https://github.com/ckb1oom/DiscoCH
-cd disco-ch
+cd DiscoCH
 conda env create -f environment.yml
 pip install -e .
 ```
@@ -33,5 +33,4 @@ pip install pystac-client
 
 # Install the package in editable mode
 pip install -e .
-
 ```
