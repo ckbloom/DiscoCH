@@ -28,7 +28,7 @@ conda create -n DiscoCH python=3.11 -c conda-forge
 conda activate DiscoCH
 
 # Install core dependencies
-conda install -c conda-forge rioxarray dask jupyterlab
+conda install -c conda-forge rioxarray dask jupyterlab matplotlib pandas contextily scikit-learn=1.4.0
 pip install pystac-client
 
 # Install the package in editable mode
