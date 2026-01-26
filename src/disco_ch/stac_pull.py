@@ -11,12 +11,24 @@ import warnings
 import numpy as np
 import shutil
 import dask
+import matplotlib.pyplot as plt
+import glob
+import math
+import contextily as cx
+from matplotlib.colors import LinearSegmentedColormap
+from rioxarray.exceptions import NoDataInBounds
+from disco_ch.apply_model_stac import apply_disco
 
 # Suppress specific warning
 warnings.filterwarnings(
     "ignore",
     message="angle from rectified to skew grid parameter lost in conversion to CF",
     category=UserWarning
+)
+warnings.filterwarnings(
+    "ignore",
+    message="invalid value encountered in divide",
+    category=RuntimeWarning
 )
 
 
@@ -94,7 +106,7 @@ def pull_from_stac(stac_loc='https://data.geo.admin.ch/api/stac/v0.9/', year=201
         end_date = f'{year}-09-30'
     else:
         # Define start and end dates in the year of interest
-        start_date = f'{year}-04-01'
+        start_date = f'{year}-03-01'
         end_date = date
 
     # Filter by start and end date
@@ -238,10 +250,11 @@ def new_image_check(date, existing_data_loc, stac_loc='https://data.geo.admin.ch
         return new_items, existing_meta, processed_dates
 
 
-def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False):
+def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False, verbose=0):
     """
     Load bands from a STAC item or assets dict, align 20m → 10m, and return selected bands and valid mask.
 
+    :param verbose:
     :param bbox: (minx, miny, maxx, maxy)
     :param forest_mask:
     :param band_metadata:
@@ -278,12 +291,17 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False)
 
         # Apply spatial subset
         if bbox is not None:
-            bands_10m = bands_10m.rio.clip_box(*bbox)
-            bands_20m = bands_20m.rio.clip_box(*bbox)
-            masks = masks.rio.clip_box(*bbox)
+            try:
+                bands_10m = bands_10m.rio.clip_box(*bbox)
+                bands_20m = bands_20m.rio.clip_box(*bbox)
+                masks = masks.rio.clip_box(*bbox)
+            except NoDataInBounds:
+                print("  No data in bbox, skipping asset")
+                return None, None
 
-        load_time = time.time()
-        print(f'  Loaded Data and Masks in {load_time - tick:.2f} seconds')
+        if verbose == 1:
+            load_time = time.time()
+            print(f'  Loaded Data and Masks in {load_time - tick:.2f} seconds')
 
         # Select bands and convert to float32 to save memory
         red = bands_10m.sel(band=1).astype("float32", copy=False)
@@ -291,26 +309,29 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False)
         blue = bands_10m.sel(band=3).astype("float32", copy=False)
         nir = bands_10m.sel(band=4).astype("float32", copy=False)
 
-        astype10_time = time.time()
-        print(f'  Converted 10m to float32 in {astype10_time - load_time:.2f} seconds')
+        if verbose == 1:
+            astype10_time = time.time()
+            print(f'  Converted 10m to float32 in {astype10_time - load_time:.2f} seconds')
 
         # Reproject Match 20m bands (theoretically lazy, but it seems to compute partially)
         swir = bands_20m.sel(band=2).rio.reproject_match(red, dtype="float32")
         rededge = bands_20m.sel(band=3).rio.reproject_match(red, dtype="float32")
 
-        astype20_time = time.time()
-        print(f'  Converted 20m to 10m and float32 in {astype20_time - astype10_time:.2f} seconds')
+        if verbose == 1:
+            astype20_time = time.time()
+            print(f'  Converted 20m to 10m and float32 in {astype20_time - astype10_time:.2f} seconds')
 
         # Select masks
         terrain_mask = masks.sel(band=1)
         cloud_and_cloud_shadow_mask = masks.sel(band=2)
 
         # Create a combined terrain and cloud mask
-        valid_mask = ((cloud_and_cloud_shadow_mask != 1) & (terrain_mask <= 75) & (red > 0) &
+        valid_mask = ((cloud_and_cloud_shadow_mask != 1) & (terrain_mask <= 63) & (red > 0) &
                       (forest_mask == 1))
 
-        mask_time = time.time()
-        print(f'  Formatted cloud and terrain mask in {mask_time - astype20_time:.2f} seconds')
+        if verbose == 1:
+            mask_time = time.time()
+            print(f'  Formatted cloud and terrain mask in {mask_time - astype20_time:.2f} seconds')
 
         # Collect bands and valid mask
         bands = {
@@ -322,7 +343,9 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False)
             "rededge": rededge
         }
 
-        print('  Executing tasks with Dask')
+        if verbose == 1:
+            print('  Executing tasks with Dask')
+
         # Combine all arrays in a dict for parallel compute
         all_arrays = {**bands, "valid_mask": valid_mask}
 
@@ -333,8 +356,9 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False)
         bands = dict(zip(bands.keys(), computed_arrays[:-1]))
         valid_mask = computed_arrays[-1]
 
-        ex_time = time.time()
-        print(f'  Executed all tasks in {ex_time - mask_time:.2f} seconds')
+        if verbose == 1:
+            ex_time = time.time()
+            print(f'  Executed all tasks in {ex_time - mask_time:.2f} seconds')
 
         # Drop the stacks
         del bands_10m
@@ -345,24 +369,183 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False)
     return bands, valid_mask
 
 
+
 def build_template(national_template, bbox):
     """
     Build a nodata template raster for a given bounding box
-    using the provided national template.
+    using the provided national template. Writes a GeoTIFF
+    next to the national template and returns the file path.
     """
     # Load the national template
-    national_template = rxr.open_rasterio(national_template).squeeze(drop=True).astype("float32")
+    national_da = (
+        rxr.open_rasterio(national_template)
+        .squeeze(drop=True)
+        .astype("float32")
+    )
 
     # Crop to the bounding box
-    bbox_template = national_template.rio.clip_box(*bbox)
+    bbox_template = national_da.rio.clip_box(*bbox)
 
-    return bbox_template
+    # Build output path in same directory
+    template_dir = os.path.dirname(national_template)
+    template_name = os.path.splitext(os.path.basename(national_template))[0]
+    out_path = os.path.join(
+        template_dir,
+        f"{template_name}_bbox_template.tif"
+    )
+
+    # Write GeoTIFF
+    bbox_template.rio.to_raster(out_path)
+
+    return out_path
+
+
+def plot_disco_result(raster_path, item_date, output_dir, min_pixel_count=100):
+    # 1. Load data
+    da = xr.open_dataarray(raster_path).squeeze()
+    plot_data = da.where(da != -9999)
+
+    # 2. Check density
+    if int(plot_data.count()) < min_pixel_count:
+        return False
+
+    # 3. Setup Colors
+    disco_colors = [
+    '#5A6E50',  # dark moss green
+    '#7D9B82',  # muted sage
+    '#D7BE6E',  # wheat yellow
+    '#AA7850',  # earthy tan
+    '#A05A3C'   # soft rust
+    ]
+    custom_cmap = LinearSegmentedColormap.from_list("disco_smooth", disco_colors)
+
+    # 4. Plot
+    # size=8 sets the height; aspect="equal" fixes the stretching
+    # alpha=0.7 allows the satellite imagery to peek through the probability map
+    plot_obj = plot_data.plot(
+        cmap=custom_cmap,
+        vmin=0,
+        vmax=1,
+        add_colorbar=False,
+        size=8,
+        alpha=1
+    )
+
+    ax = plot_obj.axes
+
+    # 5. Add Satellite Imagery
+    # cx.providers.Esri.WorldImagery is also an option
+    try:
+        cx.add_basemap(ax, crs=plot_data.rio.crs.to_string(), source=cx.providers.Esri.WorldTopoMap)
+    except Exception as e:
+        print(f"  Warning: Could not load basemap: {e}")
+
+    # 6. Colorbar and Labels
+    cbar = plt.colorbar(plot_obj, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Discoloration Probability', fontweight='bold')
+
+    ax.set_title(f"Discoloration Probability: {item_date}", fontsize=14)
+    ax.axis("off")
+
+    # 7. Save
+    plt.savefig(os.path.join(output_dir, f"Disco_Proba_{item_date}.png"), dpi=300, bbox_inches='tight')
+    plt.show()
+    plt.close()
+
+
+def plot_disco_grid(raster_dir, pattern="Disco_Proba_*.tif", cols=3):
+    """
+    Creates a grid of all discoloration maps overlaid on satellite imagery.
+    Ensures correct aspect ratio (no stretching) and consistent scaling.
+    """
+    # 1. Gather all files
+    files = sorted(glob.glob(os.path.join(raster_dir, pattern)))
+    if not files:
+        print("No files found to grid!")
+        return
+
+    num_files = len(files)
+    rows = math.ceil(num_files / cols)
+
+    # 2. Setup Custom Continuous Colormap
+    disco_colors = ['#D4E157', '#AED581', '#FFEB3B', '#FF9800', '#F44336', '#D32F2F']
+    custom_cmap = LinearSegmentedColormap.from_list("disco_smooth", disco_colors)
+
+    # 3. Create the Figure
+    # We use a larger size per subplot to ensure satellite tiles are readable
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 6))
+
+    # Flatten axes for easy iteration
+    if num_files > 1:
+        axes_flat = axes.flatten()
+    else:
+        axes_flat = [axes]
+
+    print(f"Generating satellite grid for {num_files} images. This may take a moment...")
+
+    for i, file_path in enumerate(files):
+        ax = axes_flat[i]
+
+        # Load and mask
+        da = xr.open_dataarray(file_path).squeeze()
+        plot_data = da.where(da != -9999)
+
+        # Extract date from filename
+        file_name = os.path.basename(file_path)
+        date_str = file_name.replace("Disco_Proba_", "").replace(".tif", "")
+
+        # 4. Plot the data with transparency (alpha)
+        # We use ax.set_aspect('equal') instead of xarray's size/aspect for subplots
+        im = plot_data.plot(
+            ax=ax,
+            cmap=custom_cmap,
+            vmin=0,
+            vmax=1,
+            add_colorbar=False,
+            alpha=0.6,  # Allows satellite imagery to show through
+            zorder=2  # Puts the data above the basemap
+        )
+
+        ax.set_aspect('equal', adjustable='datalim')
+
+        # 5. Add Satellite Basemap
+        try:
+            # We use the CRS from the rioxarray object
+            crs_str = plot_data.rio.crs.to_string()
+            cx.add_basemap(ax, crs=crs_str, source=cx.providers.Esri.WorldImagery, zoom='auto', zorder=1)
+        except Exception as e:
+            print(f"  Warning: Basemap failed for {date_str}: {e}")
+
+        ax.set_title(f"Date: {date_str}", fontsize=12, fontweight='bold')
+        ax.axis("off")
+
+    # 6. Hide unused subplots if files < rows * cols
+    for j in range(i + 1, len(axes_flat)):
+        axes_flat[j].axis("off")
+
+    # 7. Add a single shared colorbar at the bottom
+    # Adjust fraction/pad to fit the bottom of the grid
+    cbar = fig.colorbar(im, ax=axes, orientation='horizontal', fraction=0.02, pad=0.03)
+    cbar.set_label('Discoloration Probability (Continuous Scale)', fontweight='bold', fontsize=14)
+    cbar.set_ticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+
+    plt.suptitle("Seasonal Forest Health Summary: Satellite Overlay", fontsize=24, fontweight='bold', y=0.98)
+
+    # 8. Save and Show
+    grid_out = os.path.join(raster_dir, "Satellite_Summary_Grid.png")
+    plt.savefig(grid_out, dpi=200, bbox_inches='tight')
+    plt.show()
+    plt.close(fig)
+    print(f"Finished! Summary saved to: {grid_out}")
 
 
 def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bounding,
-                      band_metadata=False):
+                      band_metadata=False, run_after_each_update=False, disco_model=None, output_dir=None):
     """
     Updates (or creates) VI min max rasters and metadata
+    :param output_dir:
+    :param disco_model:
+    :param run_after_each_update:
     :param bounding:
     :param template:
     :param forest_mask:
@@ -467,6 +650,47 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
 
             backup_time = time.time()
             print(f"  Min/Max saved + metadata updated in {backup_time - comp_time:.2f} seconds")
+
+            if run_after_each_update:
+                print("  Running normalization and model application")
+
+                # Reload fresh min max rasters
+                vi_min_final, vi_max_final = load_minmax_rasters(
+                    year_of_interest, existing_data
+                )
+
+                # Normalize only the current item
+                normalized_vis = normalize_vis(
+                    item,
+                    vi_min_final,
+                    vi_max_final,
+                    forest_mask,
+                    bounding
+                )
+
+                # Apply discoloration model or save normalized vis
+                if output_dir is not None:
+                    item_date = get_item_datetime(item).date().isoformat()
+                    if disco_model is None:
+                        for vi_name, da in normalized_vis.items():
+                            out_path = os.path.join(
+                                output_dir,
+                                f"{vi_name}_{item_date}.tif"
+                            )
+                            da.transpose("band", "y", "x").rio.to_raster(out_path)
+
+                    # Apply discoloration model
+                    else:
+                        disco_out = os.path.join(
+                            output_dir,
+                            f"Disco_Proba_{item_date}.tif"
+                        )
+
+                        # Capture the returned DataArray for immediate plotting
+                        disco_da = apply_disco(normalized_vis, disco_model, disco_out)
+
+                        # Plotting
+                        plot_disco_result(disco_out, item_date, output_dir)
 
             # Free up memory between items
             del vi_min, vi_max

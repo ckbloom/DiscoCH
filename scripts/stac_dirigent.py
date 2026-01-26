@@ -31,14 +31,17 @@ forest_mask = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\SEO_DRAINS_Fore
 # NaN value template for initializing min and max values
 ch_template = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\NoValue_CH_Extent.tif"
 
-output = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\output"
+output = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\output\demo"
 
 disco_model = (r'G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\sen_disco_model\2025_03_12\SVC'
                r'\empirical_model_pipeline_2025_6_2_1dfdb58bc3_dirty.pkl')
+# disco_model=None
 
 bounding_box = (2688769, 1286490, 2691176, 1288144)  # SH
 
 save_norm_vi = False
+
+run_incremental_normalization = True
 
 
 # Run the code
@@ -71,30 +74,33 @@ if __name__ == '__main__':
 
     # Process new dates into annual Min Max VIs
     else:
-        update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bounding_box)
+        update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bounding_box,
+                          run_after_each_update=run_incremental_normalization,
+                          disco_model=disco_model,
+                          output_dir=output)
         vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data)
 
-    # Step 2: Normalize the closest raster to the date of interest
-    ###################################################################################################################
-    print('Processing Normalized Vegetation Indices')
-    # Pulls the closest date within the year to the date of interest
-    closest_data = pull_closest_from_stac(date_of_interest, stac_location)
-
-    # Normalize the data at the closest date
-    normalized_vis = normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding_box)
-
-    if save_norm_vi:
-        for vi_name, da in normalized_vis.items():
-            output_path = os.path.join(output, f"{vi_name}_{date_of_interest}.tif")
-            da_transpose = da.transpose('band', 'y', 'x')
-            da_transpose.rio.to_raster(output_path)
-            print(f"Saved {vi_name} to {output_path}")
-
-    # Step 3: Apply Discoloration Model to normalized VIs
-    ##################################################################################################################
-    output_path = f"Disco_Proba_{date_of_interest}.tif"
-
-    apply_disco(normalized_vis, disco_model, output_path)
+    # # Step 2: Normalize the closest raster to the date of interest
+    # ###################################################################################################################
+    # print('Processing Normalized Vegetation Indices')
+    # # Pulls the closest date within the year to the date of interest
+    # closest_data = pull_closest_from_stac(date_of_interest, stac_location)
+    #
+    # # Normalize the data at the closest date
+    # normalized_vis = normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding_box)
+    #
+    # if save_norm_vi:
+    #     for vi_name, da in normalized_vis.items():
+    #         output_path = os.path.join(output, f"{vi_name}_{date_of_interest}.tif")
+    #         da_transpose = da.transpose('band', 'y', 'x')
+    #         da_transpose.rio.to_raster(output_path)
+    #         print(f"Saved {vi_name} to {output_path}")
+    #
+    # # Step 3: Apply Discoloration Model to normalized VIs
+    # ##################################################################################################################
+    # output_path = f"Disco_Proba_{date_of_interest}.tif"
+    #
+    # apply_disco(normalized_vis, disco_model, output_path)
 
     # import os
     # import rioxarray
