@@ -7,8 +7,8 @@ DiscoCH is a Python tool for applying WSL's DRAINS project discoloration model t
 ## Example Usage
 
 To run the example, load the Jupyter Notebook in the notebooks directory and update the input and output file paths in src/disco_ch/user_defined_params.py.
-These input and output locations are where the code will look for and save data
-Several datasets are required to run the code including a no-data template and forest mask. These can be downloaded from...
+These input and output locations are where the code will look for and save data.
+Several datasets are also required to run the code including a no-data template and forest mask. These datasets can be requested by emailing colin.bloom@wsl.ch
 
 
 ---
