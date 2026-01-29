@@ -4,14 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Updates with bbox">
-      <change beforePath="$PROJECT_DIR$/.idea/DiscoCH.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/DiscoCH.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Working example in Schaffhausen">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/environment.yml" beforeDir="false" afterPath="$PROJECT_DIR$/environment.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/notebooks/DiscoCH_Demo.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/DiscoCH_Demo.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/stac_dirigent.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/stac_dirigent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/disco_ch/apply_model_stac.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/apply_model_stac.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/disco_ch/user_defined_params.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/user_defined_params.py" afterDir="false" />
     </list>
@@ -42,20 +37,20 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.apply_model_stac.executor": "Run",
-    "Python.scratch.executor": "Run",
-    "Python.stac_dirigent.executor": "Run",
-    "Python.stac_pull.executor": "Run",
-    "Python.test.executor": "Run",
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master",
-    "last_opened_file_path": "G:/1_cbloom/Projects/2025_01_12_VHI/DiscoCH",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.apply_model_stac.executor&quot;: &quot;Run&quot;,
+    &quot;Python.scratch.executor&quot;: &quot;Run&quot;,
+    &quot;Python.stac_dirigent.executor&quot;: &quot;Run&quot;,
+    &quot;Python.stac_pull.executor&quot;: &quot;Run&quot;,
+    &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;last_opened_file_path&quot;: &quot;G:/1_cbloom/Projects/2025_01_12_VHI/DiscoCH&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH" />
@@ -246,12 +241,29 @@
       <option name="project" value="LOCAL" />
       <updated>1769083248223</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Working example in Schaffhausen">
+      <option name="closed" value="true" />
+      <created>1769439783753</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1769439783753</updated>
+    </task>
+    <task id="LOCAL-00007" summary="Working example in Schaffhausen">
+      <option name="closed" value="true" />
+      <created>1769439792488</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1769439792488</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Initial commit" />
     <MESSAGE value="Updates with bbox" />
-    <option name="LAST_COMMIT_MESSAGE" value="Updates with bbox" />
+    <MESSAGE value="Working example in Schaffhausen" />
+    <option name="LAST_COMMIT_MESSAGE" value="Working example in Schaffhausen" />
   </component>
 </project>

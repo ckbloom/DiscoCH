@@ -369,7 +369,6 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False,
     return bands, valid_mask
 
 
-
 def build_template(national_template, bbox):
     """
     Build a nodata template raster for a given bounding box
@@ -407,15 +406,16 @@ def plot_disco_result(raster_path, item_date, output_dir, min_pixel_count=100):
 
     # 2. Check density
     if int(plot_data.count()) < min_pixel_count:
+        print("This asset does not have enough valid pixels to plot")
         return False
 
     # 3. Setup Colors
     disco_colors = [
-    '#5A6E50',  # dark moss green
-    '#7D9B82',  # muted sage
-    '#D7BE6E',  # wheat yellow
-    '#AA7850',  # earthy tan
-    '#A05A3C'   # soft rust
+        '#5A6E50',  # dark moss green
+        '#7D9B82',  # muted sage
+        '#D7BE6E',  # wheat yellow
+        '#AA7850',  # earthy tan
+        '#A05A3C'  # soft rust
     ]
     custom_cmap = LinearSegmentedColormap.from_list("disco_smooth", disco_colors)
 
