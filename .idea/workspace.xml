@@ -4,15 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Added example image to notebook">
-      <change afterPath="$PROJECT_DIR$/data/empirical_discoloration_model_pipeline_2025_6_2.pkl" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/notebooks/DiscoCH_Demo.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/DiscoCH_Demo.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/stac_dirigent.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/stac_dirigent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/disco_ch/apply_model_stac.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/apply_model_stac.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/disco_ch/user_defined_params.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/user_defined_params.py" afterDir="false" />
-    </list>
+    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Updates for memory management and cloud computing" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -62,6 +54,7 @@
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\src" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH" />
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\raw_data" />
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\src" />
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\disco_ch" />
@@ -293,7 +286,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770028146502</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Updates for memory management and cloud computing">
+      <option name="closed" value="true" />
+      <created>1770121330092</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1770121330092</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -302,6 +303,7 @@
     <MESSAGE value="Working example in Schaffhausen" />
     <MESSAGE value="Minor Updates to readme, stac pull and user defined parameters" />
     <MESSAGE value="Added example image to notebook" />
-    <option name="LAST_COMMIT_MESSAGE" value="Added example image to notebook" />
+    <MESSAGE value="Updates for memory management and cloud computing" />
+    <option name="LAST_COMMIT_MESSAGE" value="Updates for memory management and cloud computing" />
   </component>
 </project>
