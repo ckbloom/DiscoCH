@@ -87,10 +87,11 @@ def print_metadata(assets, metadata_key):
         print(b["id"])
 
 
-def pull_from_stac(stac_loc='https://data.geo.admin.ch/api/stac/v0.9/', year=2018, date=None):
+def pull_from_stac(stac_loc='https://data.geo.admin.ch/api/stac/v0.9/', year=2018, end_date=None, start_date=None):
     """
     Connect to the swisstopo stac and collect datasets
-    :param date:
+    :param start_date:
+    :param end_date:
     :param stac_loc:
     :param year:
     :return:
@@ -100,14 +101,10 @@ def pull_from_stac(stac_loc='https://data.geo.admin.ch/api/stac/v0.9/', year=201
     service.add_conforms_to("COLLECTIONS")
     service.add_conforms_to("ITEM_SEARCH")
 
-    if date is None:
-        # Define start and end dates in the year of interest
-        start_date = f'{year}-04-01'
+    if end_date is None:
         end_date = f'{year}-09-30'
-    else:
-        # Define start and end dates in the year of interest
+    if start_date is None:
         start_date = f'{year}-03-01'
-        end_date = date
 
     # Filter by start and end date
     item_search = service.search(collections=['ch.swisstopo.swisseo_s2-sr_v100'], datetime=f'{start_date}/{end_date}')
@@ -195,47 +192,56 @@ def load_minmax_rasters(year, folder="minmax", chunks='default'):
     :param folder:
     :return:
     """
-    vi_min = {}
-    vi_max = {}
 
-    if chunks == 'default':
-        chunks = {'x': 1024, 'y': 1024}
-
-    for vi in ["NDVI", "EVI", "NDMI", "CIRE", "CCI"]:
-        min_path = f"{folder}/{vi}_min_{year}.tif"
-        max_path = f"{folder}/{vi}_max_{year}.tif"
-
-        if os.path.exists(min_path):
-            vi_min[vi] = rxr.open_rasterio(min_path, chunks=chunks)
-            vi_max[vi] = rxr.open_rasterio(max_path, chunks=chunks)
-
-    if len(vi_min) == 0:
+    if folder is None:
         return None, None
+    else:
+        vi_min = {}
+        vi_max = {}
 
-    return vi_min, vi_max
+        if chunks == 'default':
+            chunks = {'x': 1024, 'y': 1024}
+
+        for vi in ["NDVI", "EVI", "NDMI", "CIRE", "CCI"]:
+            min_path = f"{folder}/{vi}_min_{year}.tif"
+            max_path = f"{folder}/{vi}_max_{year}.tif"
+
+            if os.path.exists(min_path):
+                vi_min[vi] = rxr.open_rasterio(min_path, chunks=chunks)
+                vi_max[vi] = rxr.open_rasterio(max_path, chunks=chunks)
+
+        if len(vi_min) == 0:
+            return None, None
+
+        return vi_min, vi_max
 
 
 def get_item_datetime(item):
     return datetime.strptime(item.id, "%Y-%m-%dt%H%M%S")
 
 
-def new_image_check(date, existing_data_loc, stac_loc='https://data.geo.admin.ch/api/stac/v0.9/'):
+def new_image_check(start_date, end_date, existing_data_loc, stac_loc='https://data.geo.admin.ch/api/stac/v0.9/'):
     """
     Checks for new data in the year of interest
-    :param date:
+    :param end_date:
+    :param start_date:
     :param existing_data_loc:
     :param stac_loc:
     :return:
     """
 
     # Get year from date of interest
-    year = int(date.split("-")[0])
+    year = int(start_date.split("-")[0])
 
     # Pull the list of available data
-    items = pull_from_stac(stac_loc=stac_loc, year=year, date=date)
+    items = pull_from_stac(stac_loc=stac_loc, year=year, end_date=end_date, start_date=start_date)
 
     # Open processed data
-    existing_meta = load_minmax_metadata(year, existing_data_loc)
+    if existing_data_loc is not None:
+        existing_meta = load_minmax_metadata(year, existing_data_loc)
+    else:
+        existing_meta = None
+
     processed_dates = set(existing_meta["processed_dates"]) if existing_meta else set()
 
     # Find NEW items only
@@ -247,7 +253,7 @@ def new_image_check(date, existing_data_loc, stac_loc='https://data.geo.admin.ch
     if len(new_items) == 0:
         return None, None, None
     else:
-        return new_items, existing_meta, processed_dates
+        return new_items
 
 
 def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False, verbose=0):
@@ -369,7 +375,7 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False,
     return bands, valid_mask
 
 
-def build_template(national_template, bbox):
+def build_template(national_template, bbox, output=False):
     """
     Build a nodata template raster for a given bounding box
     using the provided national template. Writes a GeoTIFF
@@ -379,29 +385,47 @@ def build_template(national_template, bbox):
     national_da = (
         rxr.open_rasterio(national_template)
         .squeeze(drop=True)
-        .astype("float32")
     )
 
     # Crop to the bounding box
     bbox_template = national_da.rio.clip_box(*bbox)
 
-    # Build output path in same directory
-    template_dir = os.path.dirname(national_template)
-    template_name = os.path.splitext(os.path.basename(national_template))[0]
-    out_path = os.path.join(
-        template_dir,
-        f"{template_name}_bbox_template.tif"
+    # Convert 255 nodata values to real NaNs
+    bbox_template = (
+        bbox_template
+        .astype("float32")
+        .where(bbox_template != 255)
     )
 
-    # Write GeoTIFF
-    bbox_template.rio.to_raster(out_path)
+    del national_da
+    gc.collect()
 
-    return out_path
+    if output:
+        # Build output path in same directory
+        template_dir = os.path.dirname(national_template)
+        template_name = os.path.splitext(os.path.basename(national_template))[0]
+
+        out_path = os.path.join(
+            template_dir,
+            f"{template_name}_bbox_template.tif"
+        )
+
+        # Write GeoTIFF
+        bbox_template.rio.to_raster(out_path)
+
+    return bbox_template
 
 
-def plot_disco_result(raster_path, item_date, output_dir, min_pixel_count=100):
+def plot_disco_result(raster, item_date, output_dir, min_pixel_count=100):
     # 1. Load data
-    da = xr.open_dataarray(raster_path).squeeze()
+    if isinstance(raster, str):
+        da = xr.open_dataarray(raster).squeeze()
+    elif isinstance(raster, xr.DataArray):
+        da = raster.squeeze()
+    else:
+        raise TypeError(
+            "raster must be a file path or an xarray.DataArray (rioxarray) to plot"
+        )
     plot_data = da.where(da != -9999)
 
     # 2. Check density
@@ -448,7 +472,9 @@ def plot_disco_result(raster_path, item_date, output_dir, min_pixel_count=100):
     ax.axis("off")
 
     # 7. Save
-    plt.savefig(os.path.join(output_dir, f"Disco_Proba_{item_date}.png"), dpi=300, bbox_inches='tight')
+    if output_dir is not None:
+        plt.savefig(os.path.join(output_dir, f"Disco_Proba_{item_date}.png"), dpi=300, bbox_inches='tight')
+
     plt.show()
     plt.close()
 
@@ -539,14 +565,14 @@ def plot_disco_grid(raster_dir, pattern="Disco_Proba_*.tif", cols=3):
     print(f"Finished! Summary saved to: {grid_out}")
 
 
-def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bounding,
+def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bbox,
                       band_metadata=False, run_after_each_update=False, disco_model=None, output_dir=None):
     """
     Updates (or creates) VI min max rasters and metadata
     :param output_dir:
     :param disco_model:
     :param run_after_each_update:
-    :param bounding:
+    :param bbox:
     :param template:
     :param forest_mask:
     :param existing_data:
@@ -556,11 +582,12 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
     :return:
     """
 
-    # Initialize the vi_min and vi_max
-    vi_min = {}
-    vi_max = {}
+    # Initialize the vi_min, vi_max, and metadata
+    vi_min = None
+    vi_max = None
+    existing_meta = None
 
-    drains_forest_mask = rxr.open_rasterio(forest_mask)
+    drains_forest_mask = rxr.open_rasterio(forest_mask).rio.clip_box(*bbox)
 
     # Iterate over the items available in the SwissEO STAC
     for i, item in enumerate(items_to_process):
@@ -568,7 +595,7 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
 
         # Load the assets and extract relevant bands and masks
         assets = item.assets
-        bands, valid = load_and_process_assets(assets, drains_forest_mask, bounding, band_metadata=band_metadata)
+        bands, valid = load_and_process_assets(assets, drains_forest_mask, bbox, band_metadata=band_metadata)
 
         # Take care of occasional problems when loading assests (e.g., missing masks etc.)
         if bands is None:
@@ -591,25 +618,27 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
             vi_time = time.time()
             print(f'  Created VIs in {vi_time - tick:.2f} seconds')
 
-            # Lazy load old VI min and max if available
-            try:
-                vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data, chunks='default')
-            except FileNotFoundError:
-                vi_min, vi_max = None, None
-
             # Initialize on first image if no previous VI min max was loaded
             if vi_min is None:
-                print(f'  No existing VI min or max data was found. Creating new files.')
+                if existing_data is not None:
+                    # Lazy load old VI min and max if available
+                    try:
+                        vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data, chunks='default')
+                    except FileNotFoundError:
+                        vi_min, vi_max = None, None
 
-                # Load the template raster with the full extent to capture all orbits
-                template_raster = rxr.open_rasterio(template).squeeze(drop=True).astype("float32")
+                else:
+                    print(f'  No existing VI min or max data was found. Creating new files.')
 
-                # Initialize vi_min and vi_max from template
-                vi_min = {k: template_raster.copy(deep=True) for k in vis.keys()}
-                vi_max = {k: template_raster.copy(deep=True) for k in vis.keys()}
+                    # Load the template raster with the full extent to capture all orbits
+                    template_raster = template.squeeze(drop=True).astype("float32")
 
-                comp_time = time.time()
-                print(f'  Initialized annual Min Max from Template in {comp_time - vi_time:.2f} seconds')
+                    # Initialize vi_min and vi_max from template
+                    vi_min = {k: template_raster.copy(deep=True) for k in vis.keys()}
+                    vi_max = {k: template_raster.copy(deep=True) for k in vis.keys()}
+
+                    comp_time = time.time()
+                    print(f'  Initialized annual Min Max from Template in {comp_time - vi_time:.2f} seconds')
 
             # Reproject valid mask to match vi_min
             valid_aligned = valid.rio.reproject_match(vi_min['NDVI'])
@@ -632,8 +661,9 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
                 vi_min[k] = vi_min[k].where(np.isfinite(vi_min[k]), np.nan).transpose('band', 'y', 'x')
                 vi_max[k] = vi_max[k].where(np.isfinite(vi_max[k]), np.nan).transpose('band', 'y', 'x')
 
-                # Compute and Save to disk
-                save_minmax_rasters({k: vi_min[k]}, {k: vi_max[k]}, year_of_interest, existing_data)
+                if existing_data is not None:
+                    # Compute and Save to disk
+                    save_minmax_rasters({k: vi_min[k]}, {k: vi_max[k]}, year_of_interest, existing_data)
 
             # Free up memory between runs
             del vis
@@ -643,10 +673,18 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
             print(f'  Compared to existing Min Max in {comp_time - vi_time:.2f} seconds')
 
             # Revise the metadata with processed items
-            existing_meta = load_minmax_metadata(year_of_interest, existing_data)
+            if existing_data is not None:
+                existing_meta = load_minmax_metadata(year_of_interest, existing_data)
             processed_dates = set(existing_meta["processed_dates"]) if existing_meta else set()
             updated_dates = sorted(set(processed_dates) | {get_item_datetime(item).isoformat()})
-            save_minmax_metadata(year_of_interest, updated_dates, existing_data)
+            if existing_data is not None:
+                save_minmax_metadata(year_of_interest, updated_dates, existing_data)
+            else:
+                existing_meta = {
+                    "year": year_of_interest,
+                    "processed_dates": updated_dates,
+                    "last_updated": datetime.now(UTC).isoformat()
+                }
 
             backup_time = time.time()
             print(f"  Min/Max saved + metadata updated in {backup_time - comp_time:.2f} seconds")
@@ -654,23 +692,28 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
             if run_after_each_update:
                 print("  Running normalization and model application")
 
-                # Reload fresh min max rasters
-                vi_min_final, vi_max_final = load_minmax_rasters(
-                    year_of_interest, existing_data
-                )
+                # # Reload fresh min max rasters
+                # vi_min_final, vi_max_final = load_minmax_rasters(
+                #     year_of_interest, existing_data
+                # )
 
                 # Normalize only the current item
                 normalized_vis = normalize_vis(
                     item,
-                    vi_min_final,
-                    vi_max_final,
+                    vi_min,
+                    vi_max,
                     forest_mask,
-                    bounding
+                    bbox
                 )
 
-                # Apply discoloration model or save normalized vis
+                item_date = get_item_datetime(item).date().isoformat()
+
+                disco_out = None
+
+                # Build output file name for discoloration model or save normalized vis
                 if output_dir is not None:
-                    item_date = get_item_datetime(item).date().isoformat()
+
+                    # Export VIs if no discoloration model is passed
                     if disco_model is None:
                         for vi_name, da in normalized_vis.items():
                             out_path = os.path.join(
@@ -686,24 +729,27 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
                             f"Disco_Proba_{item_date}.tif"
                         )
 
-                        # Capture the returned DataArray for immediate plotting
-                        disco_da = apply_disco(normalized_vis, disco_model, disco_out)
+                # Apply the discoloration model
+                if disco_model is not None:
+                    # Capture the returned DataArray for immediate plotting
+                    disco_da = apply_disco(normalized_vis, disco_model, disco_out)
 
-                        # Plotting
-                        plot_disco_result(disco_out, item_date, output_dir)
+                    # Plotting
+                    plot_disco_result(disco_da, item_date, output_dir)
 
-            # Free up memory between items
-            del vi_min, vi_max
+            # # Free up memory between items
+            # del vi_min, vi_max
 
         # Reload the final rasters to export
-        vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data)
+        # vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data)
 
-    return vi_min, vi_max
+    # return vi_min, vi_max
 
 
 def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding):
     """
     Create and normalize vegetation indices by min and max
+    :param bounding:
     :param forest_mask:
     :param closest_data:
     :param vi_min:
@@ -722,6 +768,7 @@ def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding):
         print('Data is Unavailable at this Time Step')
     else:
         valid = valid.astype('uint8').transpose('band', 'y', 'x')  # Clean up the mask
+
         # Reproject valid mask to match vi_min
         valid_aligned = valid.rio.reproject_match(vi_min['NDVI'])
 

@@ -48,10 +48,12 @@ def apply_disco(vis, model_loc, output):
     out_da = out_da.transpose("band", "y", "x")
     out_da.rio.write_crs(vis["CCI"].rio.crs, inplace=True)
 
-    # Note: Use a standard float nodata like -9999 or NaN
-    out_da.rio.to_raster(output, compress="deflate", nodata=-9999)
+    # Output the model prediction to a .tif if desired
+    if output is not None:
+        out_da.rio.to_raster(output, compress="deflate", nodata=-9999)
 
     return out_da
+
 
 def apply_disco_dep(vis, model_loc, output):
     """

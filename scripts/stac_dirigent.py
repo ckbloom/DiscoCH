@@ -1,6 +1,6 @@
 from src.disco_ch.stac_pull import (new_image_check, load_minmax_rasters, update_vi_min_max, pull_closest_from_stac,
                                     normalize_vis, build_template)
-
+import rioxarray as rxr
 from src.disco_ch.apply_model_stac import apply_disco
 import os
 
@@ -16,8 +16,9 @@ Define a date and file locations below and run the code to predict discoloration
 
 """
 
-# Define your date of interest
-date_of_interest = '2018-08-18'
+# Define your dates of interest (YYYY-MM-DD)
+start_date = '2018-03-01'
+end_date = '2018-08-18'
 
 # Local directory with existing data
 existing_data = r"B:\bloomc\minmax_demo"
@@ -53,17 +54,18 @@ if __name__ == '__main__':
     vi_min, vi_max = None, None
 
     # Get year from date of interest
-    year_of_interest = int(date_of_interest.split("-")[0])
+    year_of_interest = int(start_date.split("-")[0])
 
     # Check for existing min max metadata and new datasets from STAC
     print('Checking for Min Max data')
-    items_to_process, existing_meta, processed_dates = new_image_check(date_of_interest, existing_data, stac_location)
+    items_to_process = new_image_check(start_date, end_date, existing_data, stac_location)
 
     # Create a no data template for the region of interest
     if bounding_box is not None:
-        template = build_template(ch_template, bounding_box)
+        template = build_template(ch_template, bounding_box, True)
     else:
-        template = ch_template
+        template = rxr.open_rasterio(ch_template).squeeze(drop=True).astype("float32")
+        template = template.where(template != 255)  # Converts 255 to NaN
 
     # If no new Min Max processing is needed, load vi min and max rasters
     if items_to_process is None:
@@ -78,7 +80,7 @@ if __name__ == '__main__':
                           run_after_each_update=run_incremental_normalization,
                           disco_model=disco_model,
                           output_dir=output)
-        vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data)
+        # vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data)
 
     # # Step 2: Normalize the closest raster to the date of interest
     # ###################################################################################################################
