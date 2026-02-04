@@ -28,7 +28,7 @@ application using the pre-processed Sentinel-2 time series of
 
 You can run the example notebook in Google Colab at the following link. No coding or local installation is required but 
 you will need a free google account.
-https://colab.research.google.com/github/ckb1oom/DiscoCH/blob/master/notebooks/DiscoCH_Demo.ipynb
+https://colab.research.google.com/github/ckbloom/DiscoCH/blob/master/notebooks/DiscoCH_Demo.ipynb
 
 Note: Colab will likely throw a dependency error the first time you run the notebook.
 Colab ships with preinstalled ML packages that require numpy>=2 but DiscoCH requires numpy<2.
