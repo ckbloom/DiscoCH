@@ -1,7 +1,6 @@
 contextily
 dask
 matplotlib
-numpy
 pandas
 pystac_client==0.9.0
 Requests
