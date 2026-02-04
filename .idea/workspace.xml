@@ -376,7 +376,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770187755856</updated>
     </task>
-    <option name="localTasksCounter" value="23" />
+    <task id="LOCAL-00023" summary="Updates for memory management and cloud computing">
+      <option name="closed" value="true" />
+      <created>1770188404894</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1770188404894</updated>
+    </task>
+    <option name="localTasksCounter" value="24" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
