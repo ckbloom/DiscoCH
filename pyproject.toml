@@ -1,5 +1,5 @@
 [project]
-name = "disco_ch"
+name = "DiscoCH"
 version = "0.0.1"
 authors = [
   { name="Colin Bloom", email="colin.bloom@wsl.ch" },
@@ -15,4 +15,4 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
 [project.urls]
-Homepage = "https://github.com/ckb1oom/disco_ch"
+Homepage = "https://github.com/ckb1oom/DiscoCH"
