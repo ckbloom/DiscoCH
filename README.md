@@ -4,6 +4,14 @@ DiscoCH is a Python toolbox for applying WSL's DRAINS project discoloration mode
 The current model version corresponds with the model presented in
 [Bloom et al., in Review](http://dx.doi.org/10.2139/ssrn.5343751) 
 ---
+## Project Status
+
+DiscoCH is a **research toolbox** and is under active development.
+
+- This is an initial public release ('v0.0.1')
+- Inputs and outputs may change without notice
+- Results should not be used for operational or decision-making purposes
+---
 
 ## Example Usage
 
@@ -58,3 +66,10 @@ pip install -e .
 # Open jupyter lab and be sure to update the directory in the file paths
 jupyter lab
 ```
+
+---
+
+## License
+
+This project is released under the MIT Licence.
+See the 'LICENSE' file for details.
