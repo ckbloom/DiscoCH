@@ -17,8 +17,8 @@ DiscoCH is a **research toolbox** and is under active development.
 
 The included example notebook DiscoCH_Demo.ipynb demonstrates the DiscoCH pipeline.
 
-*IMPORTANT: The current SwissEO version does not support full model implementation.
-Sentinel-2 Band 7 is not currently available from SwissEO and has been temporarily replaced for 
+*IMPORTANT: The current swissEO version does not support full model implementation.
+Sentinel-2 Band 7 is not currently available from swissEO and has been temporarily replaced for 
 demonstration purposes only!
 Noise in the raw SwissEO time series can also result in anomalous high and low discoloration probabilities.
 Future SwissEO versions should support a more stable and accurate operational application. 
