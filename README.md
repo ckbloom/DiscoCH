@@ -22,7 +22,7 @@ Sentinel-2 Band 7 is not currently available from swissEO and has been temporari
 demonstration purposes only!
 Noise in the raw SwissEO time series can also result in anomalous high and low discoloration probabilities.
 Future SwissEO versions should support a more stable and accurate operational application. 
-See [Bloom et al., in Review](http://dx.doi.org/10.2139/ssrn.5343751) for examples of accurate model 
+See [Bloom et al., 2026](https://doi.org/10.1016/j.jag.2026.105394) for examples of accurate model 
 application using the pre-processed Sentinel-2 time series of
 [Koch et al., 2024](https://www.doi.org/10.16904/envidat.511)*
 
