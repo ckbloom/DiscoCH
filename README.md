@@ -2,7 +2,7 @@
 
 DiscoCH is a Python toolbox for applying WSL's DRAINS project discoloration model to Sentinel-2 timeseries.
 The current model version corresponds with the model presented in
-[Bloom et al., in Review](http://dx.doi.org/10.2139/ssrn.5343751) 
+[Bloom et al., 2026](https://doi.org/10.1016/j.jag.2026.105394) 
 ---
 ## Project Status
 
