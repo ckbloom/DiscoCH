@@ -6,7 +6,6 @@ import pystac_client
 from datetime import datetime, UTC
 import xarray as xr
 import rioxarray as rxr
-import requests
 import warnings
 import numpy as np
 import shutil
@@ -14,7 +13,6 @@ import dask
 import matplotlib.pyplot as plt
 import glob
 import math
-import contextily as cx
 from matplotlib.colors import LinearSegmentedColormap
 from rioxarray.exceptions import NoDataInBounds
 from disco_ch.apply_model_stac import apply_disco
@@ -46,45 +44,43 @@ def evi(nir, red, blue):
 
 
 def cire(rededge3, rededge1):
-    return (rededge3 / rededge1) - 1  # rededge3: B07 (Not Available through SwissEO!), rededge1: B05
+    return (rededge3 / rededge1) - 1  # rededge3: B07, rededge1: B05
 
 
 def cci(green, red):
     return (green - red) / (green + red)  # green: B03, red: B04
 
 
-def print_metadata(assets, metadata_key):
+def print_metadata(item):
     """
-    Prints relevant metadata from a single file
-    :param assets:
-    :param metadata_key:
-    :return:
+    Prints asset keys and band info directly from the STAC Item in v200.
     """
-    metadata_asset = assets[metadata_key]
-    response = requests.get(metadata_asset.href)
-    metadata = response.json()  # directly parse JSON from response
+    print(f"--- STAC Item Assets for {item.id} ---")
 
-    print('10m Bands:')
-    bands_10m = metadata["BANDS-10M"]["BANDS"]
-    for b in bands_10m:
-        print(b["id"])
+    bands_10m = []
+    bands_20m = []
+    masks = []
 
-    print('20m Bands:')
-    bands_20m = metadata["BANDS-20M"]["BANDS"]
-    for b in bands_20m:
-        print(b["id"])
+    for key, asset in item.assets.items():
+        if key.endswith("_10m.tif"):
+            if "mask" in key:
+                masks.append(key)
+            else:
+                bands_10m.append(key)
+        elif key.endswith("_20m.tif"):
+            bands_20m.append(key)
 
-    # Masks (10m)
-    print('Masks (10m):')
-    masks_10m = metadata.get("MASKS-10M", {}).get("BANDS", [])
-    for b in masks_10m:
-        print(b["id"])
+    print("10m Bands/Assets:")
+    for b in sorted(bands_10m):
+        print(f"  - {b}")
 
-    # Cloud probability (10m)
-    print('Cloud probability (10m):')
-    clouds_10m = metadata.get("CLOUDPROBABILITY-10M", {}).get("BANDS", [])
-    for b in clouds_10m:
-        print(b["id"])
+    print("\n20m Bands/Assets:")
+    for b in sorted(bands_20m):
+        print(f"  - {b}")
+
+    print("\nMasks (10m):")
+    for m in sorted(masks):
+        print(f"  - {m}")
 
 
 def pull_from_stac(stac_loc='https://data.geo.admin.ch/api/stac/v0.9/', year=2018, end_date=None, start_date=None):
@@ -106,8 +102,8 @@ def pull_from_stac(stac_loc='https://data.geo.admin.ch/api/stac/v0.9/', year=201
     if start_date is None:
         start_date = f'{year}-03-01'
 
-    # Filter by start and end date
-    item_search = service.search(collections=['ch.swisstopo.swisseo_s2-sr_v100'], datetime=f'{start_date}/{end_date}')
+    # Filter by start and end date - Updated to v200
+    item_search = service.search(collections=['ch.swisstopo.swisseo_s2-sr_v200'], datetime=f'{start_date}/{end_date}')
 
     # Create a list of the data available within the time window
     item_list = list(item_search.items())
@@ -256,51 +252,67 @@ def new_image_check(start_date, end_date, existing_data_loc, stac_loc='https://d
         return new_items
 
 
-def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False, verbose=0):
+def load_and_process_assets(item, forest_mask, bbox=None, band_metadata=False, verbose=0):
     """
-    Load bands from a STAC item or assets dict, align 20m → 10m, and return selected bands and valid mask.
+    Load bands from a STAC item, align 20m → 10m, and return selected bands and valid mask.
 
     :param verbose:
     :param bbox: (minx, miny, maxx, maxy)
     :param forest_mask:
     :param band_metadata:
-    :param assets: A dict of assets
+    :param item: A STAC Item (its .assets dict is used to locate the band files)
     :return: dict of bands, valid_mask (xr.DataArray)
     """
     tick = time.time()
     key_problem = None
+    assets = item.assets
 
     try:
-        # Get asset keys
-        bands_10m_key = next(k for k in assets.keys() if k.endswith("bands-10m.tif"))
-        bands_20m_key = next(k for k in assets.keys() if k.endswith("bands-20m.tif"))
-        mask_key = next(k for k in assets.keys() if k.endswith("masks-10m.tif"))
-    except Exception as e:
+        # Get individual v200 asset keys
+        b02_key = next(k for k in assets.keys() if k.endswith("_b02_10m.tif"))
+        b03_key = next(k for k in assets.keys() if k.endswith("_b03_10m.tif"))
+        b04_key = next(k for k in assets.keys() if k.endswith("_b04_10m.tif"))
+        b08_key = next(k for k in assets.keys() if k.endswith("_b08_10m.tif"))
+        b11_key = next(k for k in assets.keys() if k.endswith("_b11_20m.tif"))
+        b05_key = next(k for k in assets.keys() if k.endswith("_b05_20m.tif"))
+        b07_key = next(k for k in assets.keys() if k.endswith("_b07_20m.tif"))
+        tmask_key = next(k for k in assets.keys() if k.endswith("_terrainmask_10m.tif"))
+        cmask_key = next(k for k in assets.keys() if k.endswith("_cloudmask_10m.tif"))
+    except StopIteration as e:
         key_problem = 1
-        bands_10m_key = None
-        bands_20m_key = None
-        mask_key = None
-        print(f"  WARNING: Problem loading the assets within this item! Skipping. {e}")
+        print(f"  WARNING: Problem loading the v200 single-band assets within this item! Skipping. {e}")
 
     if key_problem is not None:
-        bands, valid_mask = None, None
+        return None, None
     else:
         # Optionally print out the various asset bands
         if band_metadata:
-            metadata_key = next((k for k in assets.keys() if k.endswith('metadata.json')), None)
-            print_metadata(assets, metadata_key)
+            print_metadata(item)
 
         # Load rasters lazily as dask chunks
-        bands_10m = rxr.open_rasterio(assets[bands_10m_key].href, masked=True, chunks={"x": 1024, "y": 1024})
-        bands_20m = rxr.open_rasterio(assets[bands_20m_key].href, masked=True, chunks={"x": 1024, "y": 1024})
-        masks = rxr.open_rasterio(assets[mask_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        red = rxr.open_rasterio(assets[b04_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        green = rxr.open_rasterio(assets[b03_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        blue = rxr.open_rasterio(assets[b02_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        nir = rxr.open_rasterio(assets[b08_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        swir = rxr.open_rasterio(assets[b11_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        rededge1 = rxr.open_rasterio(assets[b05_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        rededge3 = rxr.open_rasterio(assets[b07_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+
+        terrain_mask = rxr.open_rasterio(assets[tmask_key].href, masked=True, chunks={"x": 1024, "y": 1024})
+        cloud_mask = rxr.open_rasterio(assets[cmask_key].href, masked=True, chunks={"x": 1024, "y": 1024})
 
         # Apply spatial subset
         if bbox is not None:
             try:
-                bands_10m = bands_10m.rio.clip_box(*bbox)
-                bands_20m = bands_20m.rio.clip_box(*bbox)
-                masks = masks.rio.clip_box(*bbox)
+                red = red.rio.clip_box(*bbox)
+                green = green.rio.clip_box(*bbox)
+                blue = blue.rio.clip_box(*bbox)
+                nir = nir.rio.clip_box(*bbox)
+                swir = swir.rio.clip_box(*bbox)
+                rededge1 = rededge1.rio.clip_box(*bbox)
+                rededge3 = rededge3.rio.clip_box(*bbox)
+                terrain_mask = terrain_mask.rio.clip_box(*bbox)
+                cloud_mask = cloud_mask.rio.clip_box(*bbox)
             except NoDataInBounds:
                 print("  No data in bbox, skipping asset")
                 return None, None
@@ -309,31 +321,27 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False,
             load_time = time.time()
             print(f'  Loaded Data and Masks in {load_time - tick:.2f} seconds')
 
-        # Select bands and convert to float32 to save memory
-        red = bands_10m.sel(band=1).astype("float32", copy=False)
-        green = bands_10m.sel(band=2).astype("float32", copy=False)
-        blue = bands_10m.sel(band=3).astype("float32", copy=False)
-        nir = bands_10m.sel(band=4).astype("float32", copy=False)
+        # Convert to float32 to save memory
+        red = red.astype("float32", copy=False)
+        green = green.astype("float32", copy=False)
+        blue = blue.astype("float32", copy=False)
+        nir = nir.astype("float32", copy=False)
 
         if verbose == 1:
             astype10_time = time.time()
             print(f'  Converted 10m to float32 in {astype10_time - load_time:.2f} seconds')
 
         # Reproject Match 20m bands (theoretically lazy, but it seems to compute partially)
-        swir = bands_20m.sel(band=2).rio.reproject_match(red, dtype="float32")
-        rededge = bands_20m.sel(band=3).rio.reproject_match(red, dtype="float32")
+        swir = swir.rio.reproject_match(red, dtype="float32")
+        rededge1 = rededge1.rio.reproject_match(red, dtype="float32")
+        rededge3 = rededge3.rio.reproject_match(red, dtype="float32")
 
         if verbose == 1:
             astype20_time = time.time()
             print(f'  Converted 20m to 10m and float32 in {astype20_time - astype10_time:.2f} seconds')
 
-        # Select masks
-        terrain_mask = masks.sel(band=1)
-        cloud_and_cloud_shadow_mask = masks.sel(band=2)
-
         # Create a combined terrain and cloud mask
-        valid_mask = ((cloud_and_cloud_shadow_mask != 1) & (terrain_mask <= 63) & (red > 0) &
-                      (forest_mask == 1))
+        valid_mask = ((cloud_mask != 1) & (terrain_mask <= 63) & (red > 0) & (forest_mask == 1))
 
         if verbose == 1:
             mask_time = time.time()
@@ -346,7 +354,8 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False,
             "blue": blue,
             "nir": nir,
             "swir": swir,
-            "rededge": rededge
+            "rededge1": rededge1,
+            "rededge3": rededge3
         }
 
         if verbose == 1:
@@ -366,10 +375,8 @@ def load_and_process_assets(assets, forest_mask, bbox=None, band_metadata=False,
             ex_time = time.time()
             print(f'  Executed all tasks in {ex_time - mask_time:.2f} seconds')
 
-        # Drop the stacks
-        del bands_10m
-        del bands_20m
-        del masks
+        # Clean memory
+        del red, green, blue, nir, swir, rededge1, rededge3, terrain_mask, cloud_mask
         gc.collect()
 
     return bands, valid_mask
@@ -416,7 +423,12 @@ def build_template(national_template, bbox, output=False):
     return bbox_template
 
 
-def plot_disco_result(raster, item_date, output_dir, min_pixel_count=100):
+def plot_disco_result(raster, item_date, output_dir, min_pixel_count=100, show=True):
+    # Import lazily so environments without a working contextily/geopy
+    # install (or with broken SSL cert stores) can still run the pipeline
+    # with plotting disabled.
+    import contextily as cx
+
     # 1. Load data
     if isinstance(raster, str):
         da = xr.open_dataarray(raster).squeeze()
@@ -434,13 +446,8 @@ def plot_disco_result(raster, item_date, output_dir, min_pixel_count=100):
         return False
 
     # 3. Setup Colors
-    disco_colors = [
-        '#5A6E50',  # dark moss green
-        '#7D9B82',  # muted sage
-        '#D7BE6E',  # wheat yellow
-        '#AA7850',  # earthy tan
-        '#A05A3C'  # soft rust
-    ]
+    disco_colors = ['#0A2F1F', '#228B22', '#9ACD32', '#FFFF00', '#FFFFE0']
+
     custom_cmap = LinearSegmentedColormap.from_list("disco_smooth", disco_colors)
 
     # 4. Plot
@@ -452,7 +459,9 @@ def plot_disco_result(raster, item_date, output_dir, min_pixel_count=100):
         vmax=1,
         add_colorbar=False,
         size=8,
-        alpha=1
+        alpha=1,
+        aspect='auto',
+
     )
 
     ax = plot_obj.axes
@@ -475,7 +484,8 @@ def plot_disco_result(raster, item_date, output_dir, min_pixel_count=100):
     if output_dir is not None:
         plt.savefig(os.path.join(output_dir, f"Disco_Proba_{item_date}.png"), dpi=300, bbox_inches='tight')
 
-    plt.show()
+    if show:
+        plt.show()
     plt.close()
 
 
@@ -484,6 +494,11 @@ def plot_disco_grid(raster_dir, pattern="Disco_Proba_*.tif", cols=3):
     Creates a grid of all discoloration maps overlaid on satellite imagery.
     Ensures correct aspect ratio (no stretching) and consistent scaling.
     """
+    # Import lazily so environments without a working contextily/geopy
+    # install (or with broken SSL cert stores) can still run the pipeline
+    # with plotting disabled.
+    import contextily as cx
+
     # 1. Gather all files
     files = sorted(glob.glob(os.path.join(raster_dir, pattern)))
     if not files:
@@ -566,7 +581,8 @@ def plot_disco_grid(raster_dir, pattern="Disco_Proba_*.tif", cols=3):
 
 
 def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bbox,
-                      band_metadata=False, run_after_each_update=False, disco_model=None, output_dir=None):
+                      band_metadata=False, run_after_each_update=False, disco_model=None, output_dir=None,
+                      plot_results=True):
     """
     Updates (or creates) VI min max rasters and metadata
     :param output_dir:
@@ -579,6 +595,9 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
     :param items_to_process: List of items to process in the year of interest
     :param year_of_interest: Year to process
     :param band_metadata: Print out information from the STAC
+    :param plot_results: If True (default), display/save the discoloration plot after each
+        update when run_after_each_update and disco_model are set. Set False to skip plotting
+        entirely (e.g. for headless batch runs) while still writing the output raster.
     :return:
     """
 
@@ -587,15 +606,18 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
     vi_max = None
     existing_meta = None
 
-    drains_forest_mask = rxr.open_rasterio(forest_mask).rio.clip_box(*bbox)
+    drains_forest_mask = rxr.open_rasterio(forest_mask)
+    if bbox is not None:
+        drains_forest_mask = drains_forest_mask.rio.clip_box(*bbox)
 
     # Iterate over the items available in the SwissEO STAC
     for i, item in enumerate(items_to_process):
         print(f"\n Processing {i + 1}/{len(items_to_process)} : {item.id}")
 
-        # Load the assets and extract relevant bands and masks
-        assets = item.assets
-        bands, valid = load_and_process_assets(assets, drains_forest_mask, bbox, band_metadata=band_metadata)
+        if band_metadata:
+            print_metadata(item)
+
+        bands, valid = load_and_process_assets(item, drains_forest_mask, bbox, band_metadata=band_metadata)
 
         # Take care of occasional problems when loading assests (e.g., missing masks etc.)
         if bands is None:
@@ -611,7 +633,7 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
                 "NDVI": ndv(bands["nir"], bands["red"]),
                 "EVI": evi(bands["nir"], bands["red"], bands["blue"]),
                 "NDMI": ndm(bands["nir"], bands["swir"]),
-                "CIRE": cire(bands["nir"], bands["rededge"]),  # Using NIR as a proxy for Red Edge 3
+                "CIRE": cire(bands["rededge3"], bands["rededge1"]),
                 "CCI": cci(bands["green"], bands["red"])
             }
 
@@ -621,13 +643,12 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
             # Initialize on first image if no previous VI min max was loaded
             if vi_min is None:
                 if existing_data is not None:
-                    # Lazy load old VI min and max if available
                     try:
                         vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data, chunks='default')
                     except FileNotFoundError:
                         vi_min, vi_max = None, None
 
-                else:
+                if vi_min is None:
                     print(f'  No existing VI min or max data was found. Creating new files.')
 
                     # Load the template raster with the full extent to capture all orbits
@@ -734,16 +755,9 @@ def update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_
                     # Capture the returned DataArray for immediate plotting
                     disco_da = apply_disco(normalized_vis, disco_model, disco_out)
 
-                    # Plotting
-                    plot_disco_result(disco_da, item_date, output_dir)
-
-            # # Free up memory between items
-            # del vi_min, vi_max
-
-        # Reload the final rasters to export
-        # vi_min, vi_max = load_minmax_rasters(year_of_interest, existing_data)
-
-    # return vi_min, vi_max
+                    # Plotting is optional: controlled by plot_results
+                    if plot_results:
+                        plot_disco_result(disco_da, item_date, output_dir, show=True)
 
 
 def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding):
@@ -758,10 +772,10 @@ def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding):
     """
 
     drains_forest_mask = rxr.open_rasterio(forest_mask)
+    if bounding is not None:
+        drains_forest_mask = drains_forest_mask.rio.clip_box(*bounding)
 
-    assets = closest_data.assets
-
-    bands, valid = load_and_process_assets(assets, drains_forest_mask, bounding)
+    bands, valid = load_and_process_assets(closest_data, drains_forest_mask, bounding)
 
     # Take care of occasional problems when loading assests (e.g., missing masks etc.)
     if bands is None:
@@ -776,7 +790,7 @@ def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding):
             "NDVI": ndv(bands["nir"], bands["red"]),
             "EVI": evi(bands["nir"], bands["red"], bands["blue"]),
             "NDMI": ndm(bands["nir"], bands["swir"]),
-            "CIRE": cire(bands["nir"], bands["rededge"]),
+            "CIRE": cire(bands["rededge3"], bands["rededge1"]),
             "CCI": cci(bands["green"], bands["red"])
         }
 
@@ -801,7 +815,7 @@ def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding):
 
 
 def pull_closest_from_stac(target_date_str, stac_loc='https://data.geo.admin.ch/api/stac/v0.9/',
-                           collection='ch.swisstopo.swisseo_s2-sr_v100'):
+                           collection='ch.swisstopo.swisseo_s2-sr_v200'):
     """
     Connect to the swisstopo STAC and find the item closest to the target date.
 
@@ -835,4 +849,11 @@ def pull_closest_from_stac(target_date_str, stac_loc='https://data.geo.admin.ch/
 
 
 if __name__ == '__main__':
-    pass
+    # Fetch STAC items for July 2026
+    items = pull_from_stac(year=2026, start_date='2026-07-01', end_date='2026-07-15')
+
+    if items:
+        # Pass the first STAC item directly to the function
+        print_metadata(items[0])
+    else:
+        print("No items found matching the search criteria.")

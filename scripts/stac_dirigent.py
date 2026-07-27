@@ -14,27 +14,26 @@ Define dates and file locations below and run the code to predict discoloration
 """
 
 # Define your dates of interest (YYYY-MM-DD)
-start_date = '2018-03-01'
-end_date = '2018-08-18'
+start_date = '2026-03-01'
+end_date = '2026-07-20'
 
 # Local directory with existing data
-existing_data = r"..\DiscoCH\output\minmax_demo"
+existing_data = r"B:\bloomc\DiscoCH_2026_07_27"
 
 # If needed, modify the STAC location
 stac_location = 'https://data.geo.admin.ch/api/stac/v0.9/'
 
 # Forest Mask
-forest_mask = r"..\DiscoCH\data\SEO_DRAINS_Forest_10m_Mask.tif"
+forest_mask = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\DRAINS_Forest_Mask.tif"
 
 # NaN value template for initializing min and max values
-ch_template = r"..\DiscoCH\data\NoValue_CH_Extent.tif"
+ch_template = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\CH_NoValue_255.tif"
 
-output = r"..\DiscoCH\output\demo"
+output = r"B:\bloomc\DiscoCH_2026_07_27"
 
-disco_model = r'..\DiscoCH\data\empirical_discoloration_model_pipeline_2025_6_2.pkl'
+disco_model = r'G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\empirical_discoloration_model_pipeline_2025_6_2.pkl'
 
-bounding_box = (2688769, 1286490, 2691176, 1288144)
-# bounding_box = (2691388, 1285780, 2697392, 1290313)  # Alternate Schaffhausen Region
+bounding_box = None # (2688769, 1286490, 2691176, 1288144)
 
 save_norm_vi = False
 
@@ -73,4 +72,5 @@ if __name__ == '__main__':
         update_vi_min_max(items_to_process, year_of_interest, existing_data, forest_mask, template, bounding_box,
                           run_after_each_update=run_incremental_normalization,
                           disco_model=disco_model,
-                          output_dir=output)
+                          output_dir=output,
+                          plot_results=False)
