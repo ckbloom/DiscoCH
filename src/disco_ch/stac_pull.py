@@ -980,7 +980,9 @@ def update_vi_min_max_interpolated(items_to_process, year_of_interest, existing_
                                     disco_model=None, output_dir=None, plot_results=True,
                                     model_months=None, widths=None, wait_days=None,
                                     max_backward_gap_days=None, max_radius_days=None,
-                                    season_start="05-01", season_end="07-24", step_days=5):
+                                    season_start="05-01", season_end="07-24", step_days=5,
+                                    despike=True, despike_threshold_factor=None, despike_max_iter=None,
+                                    cross_vi_despike=False, chunk_size=None):
     """
     Interpolated counterpart to update_vi_min_max(). Two phases:
 
@@ -1022,17 +1024,36 @@ def update_vi_min_max_interpolated(items_to_process, year_of_interest, existing_
         (see class-level note above).
     :param model_months, band_metadata, disco_model, output_dir,
         plot_results: as in update_vi_min_max().
+    :param despike, despike_threshold_factor, despike_max_iter: see
+        rbf_interp.despike_daily_cube() -- despike=True (the default)
+        removes triplet-residual outliers from each VI's raw series
+        before smoothing. threshold_factor/max_iter default to
+        rbf_interp's own defaults when left None.
+    :param cross_vi_despike: see rbf_interp.delayed_interpolate_series_multi_vi().
+        Default False despikes each VI independently, one at a time
+        (lower peak memory). If True, a date flagged as an outlier by any
+        one VI's own residual test is excluded from every VI at that
+        pixel (since contamination corrupts the shared raw bands, not one
+        VI's formula in isolation), but requires every VI's full raw
+        daily cube resident in memory at once.
+    :param chunk_size: see rbf_interp._delayed_interpolate_series_generic().
+        None (default) processes each VI's whole spatial extent at once;
+        an integer pixel size processes it in chunk_size x chunk_size
+        spatial windows to cap peak memory.
     :return: (vi_min, vi_max), or (None, None) if nothing has been
         archived yet / no output date is newly eligible.
     """
     from src.disco_ch.rbf_interp import (
-        growing_season_dates, eligible_output_dates, delayed_interpolate_series_from_archive,
+        growing_season_dates, eligible_output_dates, delayed_interpolate_series_from_archive_multi_vi,
         DEFAULT_WIDTHS_DAYS, DEFAULT_WAIT_DAYS, DEFAULT_MAX_BACKWARD_GAP_DAYS, DEFAULT_MAX_RADIUS_DAYS,
+        DEFAULT_DESPIKE_THRESHOLD_FACTOR, DEFAULT_DESPIKE_MAX_ITER,
     )
     widths = widths if widths is not None else DEFAULT_WIDTHS_DAYS
     wait_days = wait_days if wait_days is not None else DEFAULT_WAIT_DAYS
     max_backward_gap_days = max_backward_gap_days if max_backward_gap_days is not None else DEFAULT_MAX_BACKWARD_GAP_DAYS
     max_radius_days = max_radius_days if max_radius_days is not None else DEFAULT_MAX_RADIUS_DAYS
+    despike_threshold_factor = despike_threshold_factor if despike_threshold_factor is not None else DEFAULT_DESPIKE_THRESHOLD_FACTOR
+    despike_max_iter = despike_max_iter if despike_max_iter is not None else DEFAULT_DESPIKE_MAX_ITER
 
     vi_keys = ["NDVI", "EVI", "NDMI", "CIRE", "CCI"]
     template_grid = template.squeeze(drop=True).astype("float32")
@@ -1113,14 +1134,16 @@ def update_vi_min_max_interpolated(items_to_process, year_of_interest, existing_
     print(f"Newly eligible output dates ({len(new_output_dates)}): "
           f"{new_output_dates[0]} .. {new_output_dates[-1]}, every {step_days}d, wait_days={wait_days}")
 
-    interpolated = {}
-    transform = crs = None
-    for k in vi_keys:
-        stack, transform, crs = delayed_interpolate_series_from_archive(
-            _archive_vi_dir(archive_root, k), new_output_dates, widths=widths, wait_days=wait_days,
-            max_backward_gap_days=max_backward_gap_days, max_radius_days=max_radius_days,
-        )
-        interpolated[k] = stack
+    archive_dirs = {k: _archive_vi_dir(archive_root, k) for k in vi_keys}
+    results = delayed_interpolate_series_from_archive_multi_vi(
+        archive_dirs, new_output_dates, widths=widths, wait_days=wait_days,
+        max_backward_gap_days=max_backward_gap_days, max_radius_days=max_radius_days,
+        despike=despike, despike_threshold_factor=despike_threshold_factor,
+        despike_max_iter=despike_max_iter, cross_vi_despike=cross_vi_despike,
+        chunk_size=chunk_size,
+    )
+    interpolated = {k: results[k][0] for k in vi_keys}
+    transform, crs = next(iter(results.values()))[1:]
 
     vi_min = vi_max = None
     if existing_data is not None:

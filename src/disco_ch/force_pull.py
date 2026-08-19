@@ -20,6 +20,7 @@ Key differences from the STAC pipeline:
 
 import os
 import re
+import csv
 import gc
 import glob
 import shutil
@@ -159,6 +160,20 @@ def _open_reference_grid(path, chunks=None):
     if chunks is None:
         chunks = RASTER_CHUNK_SIZE
     return rxr.open_rasterio(path, chunks=chunks).isel(band=0)
+
+
+def _valid_mask(vi_aligned, forest_mask_da, reference):
+    """Boolean validity mask for one already-aligned VI band: real
+    (non-NaN) data, intersected with the forest mask (reprojected/matched
+    onto `reference`'s grid) when one is given. forest_mask_da=None skips
+    the forest constraint entirely -- real data everywhere counts as
+    valid -- which is what lets run_tsa_workflow()'s forest_mask_path=None
+    process the full dataset unclipped instead of masking to forest
+    pixels."""
+    if forest_mask_da is not None:
+        forest_aligned = _reproject_match_if_needed(forest_mask_da, reference)
+        return (forest_aligned == 1) & (~np.isnan(vi_aligned))
+    return ~np.isnan(vi_aligned)
 
 
 # ---------------------------------------------------------------------
@@ -520,9 +535,7 @@ def update_vi_min_max_tsa(dates_to_run, vi_date_maps, vi_stacks, year_of_interes
         for k in date_present_in:
             vi_da = vi_bands[k]
             vi_aligned = _reproject_match_if_needed(vi_da, vi_min[k]).chunk({'x': 1024, 'y': 1024})
-            forest_aligned = _reproject_match_if_needed(forest_mask_da, vi_min[k])
-
-            valid = (forest_aligned == 1) & (~np.isnan(vi_aligned))
+            valid = _valid_mask(vi_aligned, forest_mask_da, vi_min[k])
             vi_aligned = vi_aligned.where(valid, np.nan)
 
             vi_min[k] = xr.ufuncs.fmin(vi_min[k], vi_aligned)
@@ -590,14 +603,14 @@ def normalize_vis_tsa(vi_bands, vi_min, vi_max, forest_mask_da):
     """
     TSA equivalent of normalize_vis(): given a dict of already-loaded VI
     bands for one date (all 5 keys required), normalize each against its
-    running min/max and mask by the forest mask.
+    running min/max and mask by the forest mask -- or, if
+    forest_mask_da is None, just by real (non-NaN) data, i.e. the full
+    dataset unclipped.
     """
     normalized = {}
     for k, vi_da in vi_bands.items():
         vi_aligned = _reproject_match_if_needed(vi_da, vi_min[k]).chunk({'x': 1024, 'y': 1024})
-        forest_aligned = _reproject_match_if_needed(forest_mask_da, vi_min[k])
-
-        valid = (forest_aligned == 1) & (~np.isnan(vi_aligned))
+        valid = _valid_mask(vi_aligned, forest_mask_da, vi_min[k])
         vi_aligned = vi_aligned.where(valid, np.nan)
 
         normalized[k] = ((vi_aligned - vi_min[k]) / (vi_max[k] - vi_min[k])).load()
@@ -629,7 +642,10 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
         a growing-season window. Leave both None to process every new date
         found in that year.
     :param forest_mask_path: path to the forest mask raster (same as the
-        STAC pipeline's `forest_mask` argument).
+        STAC pipeline's `forest_mask` argument). Pass None to skip forest
+        masking entirely -- every real (non-NaN) pixel counts as valid,
+        so the full dataset is processed unclipped by forest cover
+        (still subject to `bbox`, if one is given).
     :param template_path: path to the national/AOI template raster used to
         initialize vi_min/vi_max when no cache exists yet.
     :param bbox: (minx, miny, maxx, maxy) clip box. Strongly recommended --
@@ -695,15 +711,19 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
     template_bbox = _reproject_bbox_if_needed(bbox, tsa_crs, _raster_crs(template_path))
     template = build_template(template_path, template_bbox)
 
-    forest_mask_da = rxr.open_rasterio(forest_mask_path)
-    if bbox is not None:
-        forest_bbox = _reproject_bbox_if_needed(bbox, tsa_crs, forest_mask_da.rio.crs)
-        forest_mask_da = forest_mask_da.rio.clip_box(*forest_bbox)
-    else:
+    forest_mask_da = None
+    if forest_mask_path is not None:
+        forest_mask_da = rxr.open_rasterio(forest_mask_path)
+        if bbox is not None:
+            forest_bbox = _reproject_bbox_if_needed(bbox, tsa_crs, forest_mask_da.rio.crs)
+            forest_mask_da = forest_mask_da.rio.clip_box(*forest_bbox)
+
+    if bbox is None:
+        extent_note = "forest mask and every VI band" if forest_mask_da is not None else "every VI band"
         warnings.warn(
-            "run_tsa_workflow called with bbox=None: forest mask and every "
-            "VI band will be processed at full extent. Pass a bbox unless "
-            "you really need the whole raster.",
+            f"run_tsa_workflow called with bbox=None: {extent_note} will be "
+            f"processed at full extent. Pass a bbox unless you really need "
+            f"the whole raster.",
             RuntimeWarning,
         )
 
@@ -711,7 +731,8 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
         reference_grid = _open_reference_grid(next(iter(vi_paths.values())))
         try:
             template = _reproject_match_if_needed(template, reference_grid)
-            forest_mask_da = _reproject_match_if_needed(forest_mask_da, reference_grid)
+            if forest_mask_da is not None:
+                forest_mask_da = _reproject_match_if_needed(forest_mask_da, reference_grid)
         finally:
             reference_grid.close()
             del reference_grid
@@ -733,10 +754,11 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
                 stack.close()
             except Exception:
                 pass
-        try:
-            forest_mask_da.close()
-        except Exception:
-            pass
+        if forest_mask_da is not None:
+            try:
+                forest_mask_da.close()
+            except Exception:
+                pass
         del vi_stacks, forest_mask_da
         gc.collect()
 
@@ -747,11 +769,40 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
 # Grid-tile handling (X0052_Y0064-style folders)
 # ---------------------------------------------------------------------
 
-def discover_tiles(root_dir, tile_regex=r"^X\d{4}_Y\d{4}$"):
+# Repo-relative path to the CSV listing the FORCE grid tiles that actually
+# need processing (Tile_ID column, e.g. "X0055_Y0061") -- see
+# load_force_grid_ids(). Computed from this file's own location so it
+# resolves correctly regardless of the caller's working directory.
+DEFAULT_FORCE_GRID_CSV = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data", "CH_FORCE_Grids.csv",
+)
+
+
+def load_force_grid_ids(csv_path=DEFAULT_FORCE_GRID_CSV):
+    """
+    Reads the Tile_ID column out of the FORCE grid CSV (data/CH_FORCE_Grids.csv
+    by default) -- the list of 30km grid tiles that actually need
+    processing. Returns a set of tile IDs, e.g. {"X0055_Y0061", ...}.
+    """
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        return {row["Tile_ID"].strip() for row in csv.DictReader(f) if row.get("Tile_ID")}
+
+
+def discover_tiles(root_dir, tile_regex=r"^X\d{4}_Y\d{4}$", grid_csv=DEFAULT_FORCE_GRID_CSV):
     """
     Finds immediate subdirectories of `root_dir` whose names match the
     30km-grid naming convention (e.g. 'X0052_Y0064'). Returns their full
     paths, sorted for reproducible ordering/resumability.
+
+    :param grid_csv: path to a CSV with a Tile_ID column (defaults to
+        data/CH_FORCE_Grids.csv) restricting the result to only the tile
+        IDs listed there -- the grids that actually need processing.
+        Pass None to disable filtering and return every regex-matching
+        subfolder regardless of the CSV. If the given/default path
+        doesn't exist, filtering is skipped with a warning rather than
+        raising, so callers whose repo layout doesn't include the CSV
+        still work.
     """
     pattern = re.compile(tile_regex)
     tiles = [
@@ -759,6 +810,24 @@ def discover_tiles(root_dir, tile_regex=r"^X\d{4}_Y\d{4}$"):
         for name in sorted(os.listdir(root_dir))
         if os.path.isdir(os.path.join(root_dir, name)) and pattern.match(name)
     ]
+
+    if grid_csv is not None:
+        try:
+            allowed = load_force_grid_ids(grid_csv)
+        except FileNotFoundError:
+            warnings.warn(
+                f"discover_tiles: grid_csv '{grid_csv}' not found -- "
+                f"processing every matching tile folder, unfiltered.",
+                RuntimeWarning,
+            )
+        else:
+            before = len(tiles)
+            tiles = [t for t in tiles if os.path.basename(t) in allowed]
+            skipped = before - len(tiles)
+            if skipped:
+                print(f"  Filtered out {skipped} tile folder(s) not listed in {grid_csv} "
+                      f"({len(tiles)} remaining)")
+
     return tiles
 
 
@@ -959,7 +1028,7 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
                             plot_tile_results=False, plot_mosaic_results=True,
                             mosaic=True, start_date=None, end_date=None, verbose=False,
                             max_workers=1, dask_threads_per_worker=2, vi_keys=None,
-                            log_dir=None):
+                            log_dir=None, grid_csv=DEFAULT_FORCE_GRID_CSV):
     """
     Runs run_tsa_workflow() independently over every tile folder under
     `root_dir`, then (optionally) mosaics the per-date model outputs into
@@ -989,6 +1058,10 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
     :param forest_mask_path / template_path: expected to cover the full
         extent of all tiles (e.g. national rasters); each tile clips its
         own region out of them automatically via get_tile_bbox().
+        forest_mask_path=None skips forest masking for every tile -- see
+        run_tsa_workflow()'s forest_mask_path -- processing each tile's
+        full extent (still subject to that tile's own bbox) instead of
+        restricting to forest pixels.
     :param start_date / end_date: optional 'YYYY-MM-DD' bounds narrowing
         which dates within `year_of_interest` get processed, applied
         identically to every tile.
@@ -1026,13 +1099,17 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
         output_root isn't set, or './tile_logs' as a last resort) when
         left None and max_workers > 1. Ignored entirely when
         max_workers == 1, where output still streams live as before.
+    :param grid_csv: path to a CSV with a Tile_ID column (defaults to
+        data/CH_FORCE_Grids.csv) restricting processing to only the grid
+        tiles listed there -- see discover_tiles(). Pass None to process
+        every tile folder found under `root_dir`, unfiltered.
     """
     vi_keys = vi_keys if vi_keys is not None else VI_KEYS
 
     if max_workers > 1 and log_dir is None:
         log_dir = os.path.join(output_root or existing_data_root or ".", "logs")
 
-    tiles = discover_tiles(root_dir, tile_regex)
+    tiles = discover_tiles(root_dir, tile_regex, grid_csv=grid_csv)
     print(f"Found {len(tiles)} tile folders under {root_dir}")
 
     tile_output_dirs = []

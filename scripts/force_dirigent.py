@@ -1,4 +1,4 @@
-from src.disco_ch.force_pull import run_tsa_workflow_tiled
+from src.disco_ch.force_pull import run_tsa_workflow_tiled, DEFAULT_FORCE_GRID_CSV
 
 """
 Welcome to the TSA Discoloration Model Application tool
@@ -15,10 +15,10 @@ Define dates and file locations below and run the code to predict discoloration
 
 # Define your dates of interest (YYYY-MM-DD)
 start_date = '2026-03-01'
-end_date = '2026-09-30'
+end_date = '2026-08-17'
 
 # Root directory containing the X####_Y#### tile folders
-tsa_root = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\interpolated_vi_rbf_10"
+tsa_root = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\level4_rbf\2026"
 # r"\\speedy16-36\Data_23\FORCE\FORCE_Kingslide\level2\tsa\real_values_flagged"
 # r"B:\bloomc\DiscoCH_2026_08_03\FORCE\level3_tss" # r"\\speedy16-36\Data_23\FORCE\FORCE_Kingslide\level3_tss"
 
@@ -37,19 +37,24 @@ forest_mask = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\DRAINS_Forest_M
 ch_template = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\CH_NoValue_255.tif"
 
 # Root directory for per-tile outputs + the final mosaic (output_root/mosaic)
-output_root = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\output"
+output_root = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\output\2026"
 
 disco_model = r'G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\empirical_discoloration_model_pipeline_2025_6_2.pkl'
 
 # Only dates falling in these months get normalized + run through the
 # model (min/max still updates for every processed date)
-model_months = (5, 6, 7)
+model_months = (5, 6, 7, 8, 9)
 
 # Plot each individual tile's per-date output as it's produced
 plot_tile_results = False
 
 # Plot the final mosaicked per-date output after all tiles are merged
 plot_mosaic_results = False
+
+# CSV (Tile_ID column) restricting which 30km grid tiles actually get
+# processed -- defaults to data/CH_FORCE_Grids.csv. Set to None to process
+# every X####_Y#### tile folder found under tsa_root, unfiltered.
+grid_csv = DEFAULT_FORCE_GRID_CSV
 
 # Set the VI keys in the dataset
 vi_keys_2026 = {
@@ -89,4 +94,5 @@ if __name__ == '__main__':
         plot_mosaic_results=plot_mosaic_results,
         vi_pattern_template=vi_pattern_template,
         max_workers=10,
+        grid_csv=grid_csv,
     )

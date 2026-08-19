@@ -35,23 +35,23 @@ interpolate = True
 # Define your dates of interest (YYYY-MM-DD). With interpolate=True this can
 # safely start well before season_start -- see note above.
 start_date = '2026-03-01'
-end_date = '2026-07-28'
+end_date = '2026-08-12'
 
 # Local directory with existing data (min/max cache + metadata)
-existing_data = r"B:\bloomc\DiscoCH_2026_07_27"
+existing_data = r"B:\bloomc\DiscoCH_2026_08_03\swissEO\test\minmax"
 
 # interpolate=True only: parent folder for the per-VI raw-scene archive
 # that rbf_interp reads from (archive_root/<VI>/<date>.tif). Grows across
 # runs -- keep it separate from `existing_data` and never delete it
 # mid-season, or backward context for RBF is lost.
-archive_root = r"B:\bloomc\DiscoCH_2026_07_27\rbf_archive"
+archive_root = r"B:\bloomc\DiscoCH_2026_08_03\swissEO\test\rbf_archive"
 
 # interpolate=True only: fixed output-date calendar that min/max and the
 # model are evaluated on -- see rbf_interp.growing_season_dates(). Keep
 # season_start close to model_months' start; the wider [start_date,
 # end_date] pull above is what builds RBF's backward context.
 season_start = "05-01"
-season_end = "07-24"
+season_end = "08-12"
 step_days = 5
 
 # interpolate=True only: rbf_interp.delayed_smooth_one_date() params.
@@ -60,6 +60,16 @@ rbf_widths = None
 rbf_wait_days = None
 rbf_max_backward_gap_days = None
 rbf_max_radius_days = None
+
+# interpolate=True only: triplet-residual despiking (see
+# rbf_interp.despike_daily_cubes_union()). A date is removed for a pixel
+# if ANY of the 5 VIs' own residual test flags it -- contamination
+# (residual cloud/shadow/atmospheric distortion) corrupts the shared raw
+# bands, so one VI's detection protects all of them. Set despike=False to
+# fall back to the raw (unfiltered) archive.
+despike = True
+despike_threshold_factor = None  # None -> rbf_interp's default (3.0)
+despike_max_iter = None  # None -> rbf_interp's default (20)
 
 # If needed, modify the STAC location
 stac_location = 'https://data.geo.admin.ch/api/stac/v0.9/'
@@ -70,11 +80,11 @@ forest_mask = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\DRAINS_Forest_M
 # NaN value template for initializing min and max values
 ch_template = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\CH_NoValue_255.tif"
 
-output = r"B:\bloomc\DiscoCH_2026_07_27"
+output = r"B:\bloomc\DiscoCH_2026_08_03\swissEO\test\output"
 
 disco_model = r'G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\empirical_discoloration_model_pipeline_2025_6_2.pkl'
 
-bounding_box = None # (2688769, 1286490, 2691176, 1288144)
+bounding_box = (2688769, 1286490, 2691176, 1288144)  # None
 
 save_norm_vi = False
 
@@ -122,6 +132,9 @@ if __name__ == '__main__':
             season_start=season_start,
             season_end=season_end,
             step_days=step_days,
+            despike=despike,
+            despike_threshold_factor=despike_threshold_factor,
+            despike_max_iter=despike_max_iter,
         )
     else:
         # Check for existing min max metadata and new datasets from STAC

@@ -4,14 +4,18 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Updated STAC pull for V200 with additional bands available">
-      <change afterPath="$PROJECT_DIR$/scripts/force_dirigent.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/disco_ch/force_pull.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/disco_ch/interpolate.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/disco_ch/rbf_interp.py" afterDir="false" />
+    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Implemented a 10 day interpolation into STAC and FORCE pipelines">
+      <change afterPath="$PROJECT_DIR$/notebooks/DiscoCH_2026_vs_2018.ipynb" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/videos.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/disco_ch/data_transfer.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/disco_ch/force_tsi.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/disco_ch/force_tsi_batch.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/disco_ch/force_tsi_plot.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/notebooks/DiscoCH_Demo.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/DiscoCH_Demo.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/force_dirigent.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/force_dirigent.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/stac_dirigent.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/stac_dirigent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/disco_ch/force_pull.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/force_pull.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/disco_ch/rbf_interp.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/rbf_interp.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -23,6 +27,7 @@
     <option name="RECENT_TEMPLATES">
       <list>
         <option value="Python Script" />
+        <option value="Jupyter Notebook" />
       </list>
     </option>
   </component>
@@ -30,6 +35,18 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
     <option name="ROOT_SYNC" value="SYNC" />
   </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;ckbloom&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/ckbloom/DiscoCH.git&quot;,
+    &quot;accountId&quot;: &quot;9e5f32c6-0b8a-4550-aac3-9a011a22cb66&quot;
+  }
+}</component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
   </component>
@@ -44,14 +61,18 @@
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;Python.apply_model_stac.executor&quot;: &quot;Run&quot;,
+    &quot;Python.data_transfer.executor&quot;: &quot;Run&quot;,
     &quot;Python.force_dirigent.executor&quot;: &quot;Run&quot;,
     &quot;Python.interpolate.executor&quot;: &quot;Run&quot;,
+    &quot;Python.plot_pixel_comparison.executor&quot;: &quot;Run&quot;,
     &quot;Python.rbf_interp.executor&quot;: &quot;Run&quot;,
+    &quot;Python.retile_2018_archive.executor&quot;: &quot;Run&quot;,
     &quot;Python.sandbox.executor&quot;: &quot;Run&quot;,
     &quot;Python.scratch.executor&quot;: &quot;Run&quot;,
     &quot;Python.stac_dirigent.executor&quot;: &quot;Run&quot;,
     &quot;Python.stac_pull.executor&quot;: &quot;Run&quot;,
     &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;Python.videos.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
@@ -59,15 +80,15 @@
     &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
     &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
     &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;G:/1_cbloom/Projects/2025_01_12_VHI/DiscoCH/src/disco_ch&quot;,
+    &quot;last_opened_file_path&quot;: &quot;G:/1_cbloom/Projects/2025_01_12_VHI/DiscoCH/data&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;org.jetbrains.plugins.github.ui.GithubSettingsConfigurable&quot;
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
 }</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
-      <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\src\disco_ch" />
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data" />
+      <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\src\disco_ch" />
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH" />
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\scripts" />
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\src" />
@@ -80,7 +101,31 @@
       <recent name="G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\src\disco_ch" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.force_dirigent">
+  <component name="RunManager" selected="Python.videos">
+    <configuration name="data_transfer" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="DiscoCH" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/disco_ch" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <option name="RUN_TOOL" value="" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/disco_ch/data_transfer.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="force_dirigent" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="DiscoCH" />
       <option name="ENV_FILES" value="" />
@@ -97,30 +142,6 @@
       <option name="DEBUG_JUST_MY_CODE" value="false" />
       <option name="RUN_TOOL" value="" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/force_dirigent.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <configuration name="interpolate" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="DiscoCH" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/disco_ch" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="DEBUG_JUST_MY_CODE" value="false" />
-      <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/disco_ch/interpolate.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -153,7 +174,7 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="sandbox" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+    <configuration name="retile_2018_archive" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="DiscoCH" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -162,13 +183,13 @@
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/disco_ch" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/scripts" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="DEBUG_JUST_MY_CODE" value="false" />
       <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/disco_ch/sandbox.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/retile_2018_archive.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -177,7 +198,7 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="test" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+    <configuration name="videos" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="DiscoCH" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -186,13 +207,14 @@
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
+      <option name="SDK_NAME" value="Python 3.11 (DiscoCH) (4)" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/scripts" />
+      <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="DEBUG_JUST_MY_CODE" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
       <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/test.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/videos.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -201,13 +223,20 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <list>
+      <item itemvalue="Python.force_dirigent" />
+      <item itemvalue="Python.data_transfer" />
+      <item itemvalue="Python.rbf_interp" />
+      <item itemvalue="Python.retile_2018_archive" />
+      <item itemvalue="Python.videos" />
+    </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.videos" />
         <item itemvalue="Python.force_dirigent" />
         <item itemvalue="Python.rbf_interp" />
-        <item itemvalue="Python.interpolate" />
-        <item itemvalue="Python.sandbox" />
-        <item itemvalue="Python.test" />
+        <item itemvalue="Python.retile_2018_archive" />
+        <item itemvalue="Python.data_transfer" />
       </list>
     </recent_temporary>
   </component>
@@ -534,7 +563,15 @@
       <option name="project" value="LOCAL" />
       <updated>1785176561183</updated>
     </task>
-    <option name="localTasksCounter" value="39" />
+    <task id="LOCAL-00039" summary="Implemented a 10 day interpolation into STAC and FORCE pipelines">
+      <option name="closed" value="true" />
+      <created>1786524688146</created>
+      <option name="number" value="00039" />
+      <option name="presentableId" value="LOCAL-00039" />
+      <option name="project" value="LOCAL" />
+      <updated>1786524688146</updated>
+    </task>
+    <option name="localTasksCounter" value="40" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -597,6 +634,7 @@
     <MESSAGE value="Updates for memory management and cloud computing" />
     <MESSAGE value="Updated documentation" />
     <MESSAGE value="Updated STAC pull for V200 with additional bands available" />
-    <option name="LAST_COMMIT_MESSAGE" value="Updated STAC pull for V200 with additional bands available" />
+    <MESSAGE value="Implemented a 10 day interpolation into STAC and FORCE pipelines" />
+    <option name="LAST_COMMIT_MESSAGE" value="Implemented a 10 day interpolation into STAC and FORCE pipelines" />
   </component>
 </project>
