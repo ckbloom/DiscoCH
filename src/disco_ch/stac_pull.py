@@ -875,20 +875,23 @@ def normalize_vis(closest_data, vi_min, vi_max, forest_mask, bounding, bands=Non
 # Interpolated (RBF) STAC pipeline
 #
 # The raw pipeline above (update_vi_min_max / normalize_vis) folds each
-# STAC scene into min/max the moment it's pulled. That doesn't give
-# rbf_interp anything to interpolate -- RBF needs forward/backward real
-# observations around a *fixed* output-date calendar, the same way the
-# FORCE pipeline pre-builds a full TSA archive before ever calling
-# rbf_interp.run_year(). STAC scenes arrive one (or a few) at a time, so
-# instead of a premade archive, every new scene's QC-masked VI raster is
-# appended to a growing per-VI directory archive (one small single-band
-# file per date -- appending a band to a national-extent multiband GeoTIFF
-# would mean rewriting the whole file, and everyone else's already-written
-# bands, on every new scene). Once enough of that archive exists for a
-# fixed-cadence output date to become eligible (target_date + wait_days <=
-# the latest archived date), rbf_interp is run for it and the
-# *interpolated* value -- not the raw scene -- is what feeds min/max and
-# the disco model, mirroring force_pull.run_tsa_workflow().
+# STAC scene into min/max the moment it's pulled. That doesn't give the
+# interpolation step anything to interpolate -- RBF needs forward/backward
+# real observations around a *fixed* output-date calendar, the same way
+# the FORCE pipeline pre-builds a full TSA archive before ever calling
+# force_tsi_batch.run_tsi_tiles(). STAC scenes arrive one (or a few) at a
+# time, so instead of a premade archive, every new scene's QC-masked VI
+# raster is appended to a growing per-VI directory archive (one small
+# single-band file per date -- appending a band to a national-extent
+# multiband GeoTIFF would mean rewriting the whole file, and everyone
+# else's already-written bands, on every new scene). Once enough of that
+# archive exists for a fixed-cadence output date to become eligible
+# (target_date + wait_days <= the latest archived date), the
+# swisseo_stepwise.py despike()/rbf_interpolate() pipeline (see
+# update_vi_min_max_interpolated()'s MIGRATION NOTE -- this used to be
+# rbf_interp) is run for it, and the *interpolated* value -- not the raw
+# scene -- is what feeds min/max and the disco model, mirroring
+# force_pull.run_tsa_workflow().
 # ---------------------------------------------------------------------
 
 def _archive_vi_dir(archive_root, vi_key):
@@ -955,12 +958,12 @@ def latest_archived_date(archive_root, vi_keys):
 
 def _wrap_interpolated_band(arr_2d, transform, crs):
     """
-    Wraps one rbf_interp output date's 2D numpy array (see
-    rbf_interp.delayed_interpolate_series_from_archive()) as a
-    (band, y, x) DataArray with a working `.rio` accessor -- proper x/y
-    coordinate arrays derived from `transform`, not just transform
-    metadata -- so it behaves like any other VI band for
-    reproject_match/clip_box downstream.
+    Wraps one interpolated output date's 2D numpy array (see
+    swisseo_stepwise.interpolate_archive_dates()) as a (band, y, x)
+    DataArray with a working `.rio` accessor -- proper x/y coordinate
+    arrays derived from `transform`, not just transform metadata -- so
+    it behaves like any other VI band for reproject_match/clip_box
+    downstream.
     """
     h, w = arr_2d.shape
     xs, _ = rasterio.transform.xy(transform, [0] * w, range(w))
@@ -978,36 +981,58 @@ def _wrap_interpolated_band(arr_2d, transform, crs):
 def update_vi_min_max_interpolated(items_to_process, year_of_interest, existing_data, forest_mask,
                                     template, bbox, archive_root, band_metadata=False,
                                     disco_model=None, output_dir=None, plot_results=True,
-                                    model_months=None, widths=None, wait_days=None,
-                                    max_backward_gap_days=None, max_radius_days=None,
+                                    model_months=None, rbf_sigma=(10, 20, 30, 50), rbf_cutoff=0.95,
+                                    wait_days=None,
                                     season_start="05-01", season_end="07-24", step_days=5,
-                                    despike=True, despike_threshold_factor=None, despike_max_iter=None,
-                                    cross_vi_despike=False, chunk_size=None):
+                                    despike=True, above_noise=3.0, below_noise=1.0,
+                                    chunk_size=None, blas_threads=1, verbose_chunks=False,
+                                    interpolated_output_dir=None):
     """
     Interpolated counterpart to update_vi_min_max(). Two phases:
 
     1. Archive: every scene in `items_to_process` has its QC-masked VI
        rasters computed and appended to the per-VI directory archive under
        `archive_root`, regardless of month -- this is cheap (no min/max or
-       model work) and just builds up the backward/forward context
-       rbf_interp needs. `items_to_process` can span a much wider date
-       range than the model season; pulling early scenes now means the
-       first in-season output dates already have real historical context
-       once interpolation starts.
+       model work) and just builds up the backward/forward context the
+       interpolation step needs. `items_to_process` can span a much wider
+       date range than the model season; pulling early scenes now means
+       the first in-season output dates already have real historical
+       context once interpolation starts.
 
     2. Interpolate: once archived, any fixed-cadence output date (see
-       rbf_interp.growing_season_dates()) that has newly become eligible
+       force_tsi.output_dates_from_range()) that has newly become eligible
        (target_date + wait_days <= the latest archived date -- see
-       rbf_interp.eligible_output_dates()) is run through rbf_interp for
-       every VI, and the *interpolated* raster -- not any single raw scene
-       -- is folded into the running seasonal min/max and, within
-       `model_months`, normalized and passed to the disco model. This
-       mirrors force_pull.run_tsa_workflow() running on rbf_interp's
-       premade output, just computed incrementally as new scenes arrive.
+       swisseo_stepwise.eligible_output_dates()) is run through
+       swisseo_stepwise.interpolate_archive_dates() for every VI, and the
+       *interpolated* raster -- not any single raw scene -- is folded into
+       the running seasonal min/max and, within `model_months`, normalized
+       and passed to the disco model. This mirrors
+       force_pull.run_tsa_workflow() running on force_tsi_batch's premade
+       output, just computed incrementally as new scenes arrive.
 
        Naturally a no-op before `season_start`: eligible_output_dates()
        returns nothing until the first output date is due, so pulling
        scenes far ahead of the model season costs archiving only.
+
+    MIGRATION NOTE: this used to run rbf_interp's multi-width ensemble +
+    isolated-point-fallback interpolation (delayed_interpolate_series_from_archive_multi_vi()).
+    It now uses the same force_tsi.py despike()/rbf_interpolate() (via
+    swisseo_stepwise.interpolate_archive_dates()) that force_tsi_batch.py/
+    force_tsi_stepwise.py already use for the FORCE side, for one shared
+    interpolation implementation instead of two. Two rbf_interp-only
+    concepts have no equivalent and are gone rather than silently
+    ignored: `max_backward_gap_days`/`max_radius_days` (rbf_interp's
+    isolated-point-fallback machinery -- force_tsi.rbf_interpolate() just
+    uses each sigma's own rbf_cutoff-derived radius symmetrically, no
+    separate backward-gap/isolation logic) and `cross_vi_despike`
+    (force_tsi.despike() only ever despikes one VI's own series in
+    isolation). `widths` is renamed `rbf_sigma` (same meaning/units --
+    just matching force_tsi.py's own parameter name) and rbf_cutoff is
+    now an explicit parameter rather than always 0.95 internally.
+    `despike_threshold_factor`/`despike_max_iter` are replaced by
+    force_tsi.despike()'s own `above_noise`/`below_noise` (max_iter is
+    fixed at 20, matching force_tsi.despike()'s own default -- expose it
+    here too if you ever need to override it).
 
     :param archive_root: parent folder for the per-VI raw-scene archive
         (archive_root/<VI>/<date>.tif). Kept separate from `existing_data`
@@ -1015,45 +1040,44 @@ def update_vi_min_max_interpolated(items_to_process, year_of_interest, existing_
         only appended to. Also used as the `existing_data_loc` passed to
         new_image_check() by the caller, so already-archived scenes aren't
         re-pulled on the next run.
-    :param widths, wait_days, max_backward_gap_days, max_radius_days: see
-        rbf_interp.delayed_smooth_one_date(); default to rbf_interp's own
-        defaults when left None.
+    :param rbf_sigma, rbf_cutoff: see force_tsi.rbf_interpolate().
+    :param wait_days: see swisseo_stepwise.eligible_output_dates(). None
+        (the default) uses swisseo_stepwise.DEFAULT_WAIT_DAYS.
     :param season_start, season_end, step_days: define the fixed output-date
         calendar that min/max and the model are evaluated on -- typically
         much narrower than the range `items_to_process` was pulled over
         (see class-level note above).
     :param model_months, band_metadata, disco_model, output_dir,
         plot_results: as in update_vi_min_max().
-    :param despike, despike_threshold_factor, despike_max_iter: see
-        rbf_interp.despike_daily_cube() -- despike=True (the default)
-        removes triplet-residual outliers from each VI's raw series
-        before smoothing. threshold_factor/max_iter default to
-        rbf_interp's own defaults when left None.
-    :param cross_vi_despike: see rbf_interp.delayed_interpolate_series_multi_vi().
-        Default False despikes each VI independently, one at a time
-        (lower peak memory). If True, a date flagged as an outlier by any
-        one VI's own residual test is excluded from every VI at that
-        pixel (since contamination corrupts the shared raw bands, not one
-        VI's formula in isolation), but requires every VI's full raw
-        daily cube resident in memory at once.
-    :param chunk_size: see rbf_interp._delayed_interpolate_series_generic().
-        None (default) processes each VI's whole spatial extent at once;
-        an integer pixel size processes it in chunk_size x chunk_size
-        spatial windows to cap peak memory.
+    :param despike, above_noise, below_noise: see force_tsi.despike() --
+        despike=True (the default) removes triplet-residual outliers from
+        each VI's raw series before interpolating.
+    :param chunk_size, blas_threads, verbose_chunks: see
+        swisseo_stepwise.interpolate_archive_dates() /
+        force_tsi_batch.run_tsi_chunked(). chunk_size=None (default)
+        processes each VI's whole spatial extent at once; an integer
+        pixel size bounds peak memory. blas_threads=1 avoids BLAS thread
+        oversubscription; verbose_chunks=True prints per-chunk progress
+        (only meaningful when chunk_size is set).
+    :param interpolated_output_dir: if given, each VI's newly-interpolated
+        dates are ALSO merged into a persistent
+        interpolated_output_dir/<VI>_TSI.tif (see
+        swisseo_stepwise._merge_and_write_output()) -- the same kind of
+        standalone interpolated-VI-timeseries artifact
+        force_tsi_batch.run_tsi_tiles()/force_tsi_stepwise.py already
+        produce for FORCE. None (the default) skips this -- the
+        interpolated values are still used in-memory for min/max/the
+        model either way, this only controls whether they're ALSO kept
+        on disk as their own file.
     :return: (vi_min, vi_max), or (None, None) if nothing has been
         archived yet / no output date is newly eligible.
     """
-    from src.disco_ch.rbf_interp import (
-        growing_season_dates, eligible_output_dates, delayed_interpolate_series_from_archive_multi_vi,
-        DEFAULT_WIDTHS_DAYS, DEFAULT_WAIT_DAYS, DEFAULT_MAX_BACKWARD_GAP_DAYS, DEFAULT_MAX_RADIUS_DAYS,
-        DEFAULT_DESPIKE_THRESHOLD_FACTOR, DEFAULT_DESPIKE_MAX_ITER,
+    from src.disco_ch.force_tsi import output_dates_from_range
+    from src.disco_ch.swisseo_stepwise import (
+        eligible_output_dates, interpolate_archive_dates, _merge_and_write_output,
+        DEFAULT_WAIT_DAYS,
     )
-    widths = widths if widths is not None else DEFAULT_WIDTHS_DAYS
     wait_days = wait_days if wait_days is not None else DEFAULT_WAIT_DAYS
-    max_backward_gap_days = max_backward_gap_days if max_backward_gap_days is not None else DEFAULT_MAX_BACKWARD_GAP_DAYS
-    max_radius_days = max_radius_days if max_radius_days is not None else DEFAULT_MAX_RADIUS_DAYS
-    despike_threshold_factor = despike_threshold_factor if despike_threshold_factor is not None else DEFAULT_DESPIKE_THRESHOLD_FACTOR
-    despike_max_iter = despike_max_iter if despike_max_iter is not None else DEFAULT_DESPIKE_MAX_ITER
 
     vi_keys = ["NDVI", "EVI", "NDMI", "CIRE", "CCI"]
     template_grid = template.squeeze(drop=True).astype("float32")
@@ -1113,7 +1137,9 @@ def update_vi_min_max_interpolated(items_to_process, year_of_interest, existing_
         print("Nothing archived yet -- nothing to interpolate.")
         return None, None
 
-    all_output_dates = growing_season_dates(year_of_interest, season_start, season_end, step_days)
+    season_start_date = datetime.strptime(f"{year_of_interest}-{season_start}", "%Y-%m-%d").date()
+    season_end_date = datetime.strptime(f"{year_of_interest}-{season_end}", "%Y-%m-%d").date()
+    all_output_dates = output_dates_from_range((season_start_date, season_end_date), step_days, doy_range=(1, 365))
     existing_meta = load_minmax_metadata(year_of_interest, existing_data) if existing_data else None
     processed = set(existing_meta["processed_dates"]) if existing_meta else set()
 
@@ -1134,16 +1160,23 @@ def update_vi_min_max_interpolated(items_to_process, year_of_interest, existing_
     print(f"Newly eligible output dates ({len(new_output_dates)}): "
           f"{new_output_dates[0]} .. {new_output_dates[-1]}, every {step_days}d, wait_days={wait_days}")
 
-    archive_dirs = {k: _archive_vi_dir(archive_root, k) for k in vi_keys}
-    results = delayed_interpolate_series_from_archive_multi_vi(
-        archive_dirs, new_output_dates, widths=widths, wait_days=wait_days,
-        max_backward_gap_days=max_backward_gap_days, max_radius_days=max_radius_days,
-        despike=despike, despike_threshold_factor=despike_threshold_factor,
-        despike_max_iter=despike_max_iter, cross_vi_despike=cross_vi_despike,
-        chunk_size=chunk_size,
-    )
-    interpolated = {k: results[k][0] for k in vi_keys}
-    transform, crs = next(iter(results.values()))[1:]
+    if interpolated_output_dir is not None:
+        os.makedirs(interpolated_output_dir, exist_ok=True)
+
+    interpolated = {}
+    transform = crs = None
+    for k in vi_keys:
+        archive_dir = _archive_vi_dir(archive_root, k)
+        stack, transform, crs = interpolate_archive_dates(
+            archive_dir, new_output_dates, rbf_sigma=rbf_sigma, rbf_cutoff=rbf_cutoff,
+            above_noise=above_noise, below_noise=below_noise, chunk_size=chunk_size,
+            blas_threads=blas_threads, despike=despike, verbose_chunks=verbose_chunks,
+        )
+        interpolated[k] = stack
+
+        if interpolated_output_dir is not None:
+            out_path = os.path.join(interpolated_output_dir, f"{k}_TSI.tif")
+            _merge_and_write_output(out_path, new_output_dates, stack, transform, crs)
 
     vi_min = vi_max = None
     if existing_data is not None:
@@ -1238,3 +1271,59 @@ if __name__ == '__main__':
         print_metadata(items[0])
     else:
         print("No items found matching the search criteria.")
+
+
+# Example (from a notebook): update_vi_min_max_interpolated(), the
+# swisseo_stepwise-based (formerly rbf_interp-based) pipeline -- see its
+# MIGRATION NOTE docstring. Safe to call repeatedly (e.g. on a schedule):
+# new_image_check() only returns scenes not yet archived, and
+# update_vi_min_max_interpolated() only computes output dates that are
+# both newly eligible and not yet folded into min/max.
+#
+#   import os
+#   from src.disco_ch.stac_pull import new_image_check, update_vi_min_max_interpolated, build_template
+#
+#   # archive_root holds the raw per-VI archive (archive_root/<VI>/<date>.tif)
+#   # AND its own processed_dates metadata -- kept separate from existing_data
+#   # (the min/max cache) since they track two different things (see
+#   # update_vi_min_max_interpolated()'s :param archive_root:).
+#   archive_root = r"B:\bloomc\DiscoCH_2026_08_03\swisseo\archive"
+#   existing_data = r"B:\bloomc\DiscoCH_2026_08_03\swisseo\minmax\2026"
+#   interpolated_output_dir = r"B:\bloomc\DiscoCH_2026_08_03\swisseo\level4_rbf\2026"
+#   output_dir = r"B:\bloomc\DiscoCH_2026_08_03\swisseo\output\2026"
+#   os.makedirs(existing_data, exist_ok=True)
+#   os.makedirs(interpolated_output_dir, exist_ok=True)
+#   os.makedirs(output_dir, exist_ok=True)
+#
+#   forest_mask = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\DRAINS_Forest_Mask.tif"
+#   ch_template = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\CH_NoValue_255.tif"
+#   disco_model = r"G:\1_cbloom\Projects\2025_01_12_VHI\DiscoCH\data\empirical_discoloration_model_pipeline_2025_6_2.pkl"
+#
+#   bbox = None  # (minx, miny, maxx, maxy), same CRS as forest_mask/template -- national/AOI extent if None
+#   template = build_template(ch_template, bbox)
+#
+#   # Pull whatever scenes have appeared since the last run -- items_to_process
+#   # can span a much wider range than the model season (see class docstring);
+#   # archive_root doubles as new_image_check()'s existing_data_loc so
+#   # already-archived scenes aren't re-pulled.
+#   items_to_process = new_image_check(
+#       start_date="2026-01-01", end_date="2026-10-31", existing_data_loc=archive_root,
+#   )
+#
+#   vi_min, vi_max = update_vi_min_max_interpolated(
+#       items_to_process, year_of_interest=2026, existing_data=existing_data,
+#       forest_mask=forest_mask, template=template, bbox=bbox, archive_root=archive_root,
+#       disco_model=disco_model, output_dir=output_dir, plot_results=False,
+#       model_months=(5, 6, 7, 8, 9),
+#       rbf_sigma=(10, 20, 30, 50), rbf_cutoff=0.95,
+#       wait_days=10,  # see swisseo_stepwise.recommended_wait_days() for exact
+#                      # convergence to a full-archive result instead of low latency
+#       season_start="05-01", season_end="10-31", step_days=5,
+#       despike=True, above_noise=3.0, below_noise=1.0,
+#       chunk_size=None,       # None = whole extent at once; set an int to bound memory
+#       blas_threads=1,        # caps BLAS to 1 thread/call, avoids oversubscription
+#       verbose_chunks=True,   # per-chunk progress (only prints if chunk_size is set)
+#       interpolated_output_dir=interpolated_output_dir,  # persist each VI's
+#                              # interpolated series as <VI>_TSI.tif, not just
+#                              # fold it into min/max + the model
+#   )

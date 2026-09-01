@@ -576,7 +576,7 @@ def run_tsi_batch(tss_paths, out_dir, date_range, doy_range=(1, 365), int_day=5,
 # Tile-directory discovery, matching FORCE's one-folder-per-tile layout
 # ---------------------------------------------------------------------
 
-DEFAULT_VI_PATTERN_TEMPLATE = "*_{vi}_TSS.tif"
+DEFAULT_VI_PATTERN_TEMPLATE = "{year}*_{vi}_TSS.tif"
 
 
 def _read_tile_id_csv(path, column="Tile_ID"):
@@ -630,6 +630,21 @@ def discover_tile_dirs(root_dir, tiles_csv=None, tiles_column="Tile_ID", tiles_c
     return tile_dirs
 
 
+def _year_from_date_range(date_range):
+    """Derives a file-selection year from date_range's start date, for
+    callers that didn't pass an explicit `year` -- DEFAULT_VI_PATTERN_TEMPLATE
+    embeds the year at the front (matching the real FORCE TSA filename
+    convention, e.g. '20260101-20261231_001-365_..._NDVI_TSS.tif'), so
+    without a resolved year the glob has nothing to narrow multiple
+    years' files down to (see run_tsi_tiles()/run_tsi_tiles_stepwise()).
+    Uses date_range[0].year, i.e. the requested season's start -- pass
+    `year` explicitly instead if date_range spans a year boundary and the
+    files you actually want are named for a different year than the
+    start date.
+    """
+    return date_range[0].year
+
+
 def find_tile_vi_file(tile_dir, file_token, vi_pattern_template=DEFAULT_VI_PATTERN_TEMPLATE, year=None):
     """Find the one TSS file for a single VI within a single tile
     directory. Raises rather than guessing if zero or multiple files
@@ -641,12 +656,25 @@ def find_tile_vi_file(tile_dir, file_token, vi_pattern_template=DEFAULT_VI_PATTE
     :param vi_pattern_template: glob pattern with a `{vi}` placeholder
         (and optionally a `{year}` placeholder -- pass `year=` to fill it
         in, for archives where a tile folder holds more than one year's
-        files).
+        files). DEFAULT_VI_PATTERN_TEMPLATE has both -- a tile directory
+        holding more than one year's TSS files (the common case) needs
+        `year` resolved to something, or the glob matches every year at
+        once and raises the "multiple files" ValueError below. See
+        _year_from_date_range() for how run_tsi_tiles()/
+        run_tsi_tiles_stepwise() fill this in automatically from
+        date_range when the caller didn't pass year explicitly.
     """
     fmt_kwargs = {"vi": file_token}
     if year is not None:
         fmt_kwargs["year"] = year
-    pattern = vi_pattern_template.format(**fmt_kwargs)
+    try:
+        pattern = vi_pattern_template.format(**fmt_kwargs)
+    except KeyError as e:
+        raise ValueError(
+            f"vi_pattern_template {vi_pattern_template!r} needs a {{{e.args[0]}}} value that "
+            f"wasn't given -- pass year= explicitly (or, via run_tsi_tiles()/"
+            f"run_tsi_tiles_stepwise(), let it derive from date_range)."
+        ) from e
 
     matches = sorted(glob.glob(os.path.join(tile_dir, pattern)))
     if not matches:
@@ -676,6 +704,13 @@ def run_tsi_tiles(root_dir, vi_keys, out_dir, date_range, doy_range=(1, 365), in
     :param vi_keys: {canonical_name: file_token}, e.g.
         {"NDVI": "NDVI", "EVI": "EVI", "NDMI": "NDMI", "CIRE": "CIre", "CCI": "CCI"}   # 2026 naming
         {"NDVI": "NDV",  "EVI": "EVI", "NDMI": "NDM",  "CIRE": "CRE",  "CCI": "CCI"}   # 2018 naming
+    :param year: fills DEFAULT_VI_PATTERN_TEMPLATE's {year} placeholder
+        -- a tile directory holding more than one year's TSS files needs
+        this resolved to something, or the glob matches every year at
+        once (see find_tile_vi_file()). None (the default) derives it
+        from date_range[0].year -- see _year_from_date_range() -- so the
+        common case (one date_range, files named for that same year)
+        just works without passing year explicitly.
     :param tiles_csv, tiles_column, tiles_csv_mode: optional CSV
         restricting which tiles get processed -- see discover_tile_dirs().
         Default mode "include" is an allow list (matching the original
@@ -696,7 +731,9 @@ def run_tsi_tiles(root_dir, vi_keys, out_dir, date_range, doy_range=(1, 365), in
         multiprocessing itself) is behind a slow run.
     :return: {tile_id: {canonical_vi: (tss_path, out_path, status)}}
     """
-    call_params = dict(locals())  # snapshot of every argument -- see _write_run_params()
+    if year is None:
+        year = _year_from_date_range(date_range)
+    call_params = dict(locals())  # snapshot of every argument (year already resolved) -- see _write_run_params()
 
     tile_dirs = discover_tile_dirs(root_dir, tiles_csv, tiles_column, tiles_csv_mode)
     print(f"Found {len(tile_dirs)} tile(s) under {root_dir}")

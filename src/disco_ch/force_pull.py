@@ -944,7 +944,7 @@ def _process_one_tile(tile_path, year_of_interest, forest_mask_path, template_pa
 
     start_msg = f"=== Tile {tile_id} (pid {os.getpid()}) starting"
     start_msg += f" -- full log: {log_path} ===" if log_path else " ==="
-    print(start_msg)
+    print(start_msg, flush=True)
 
     t0 = time.time()
     tile_output_dir = None
@@ -1012,10 +1012,10 @@ def _process_one_tile(tile_path, year_of_interest, forest_mask_path, template_pa
     elapsed_min = (time.time() - t0) / 60
     if error_msg:
         print(f"=== Tile {tile_id} FAILED after {elapsed_min:.1f} min: {error_msg}"
-              + (f" -- see {log_path} ===" if log_path else " ==="))
+              + (f" -- see {log_path} ===" if log_path else " ==="), flush=True)
     else:
         print(f"=== Tile {tile_id} done in {elapsed_min:.1f} min"
-              + (f" -- log: {log_path} ===" if log_path else " ==="))
+              + (f" -- log: {log_path} ===" if log_path else " ==="), flush=True)
 
     return tile_id, tile_output_dir, error_msg
 
@@ -1094,11 +1094,20 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
         console output becomes unreadable, so each tile's full chatter
         (every print() inside build_date_index/update_vi_min_max_tsa/
         etc.) is redirected to its own log file instead, and only a
-        one-line start/done/error summary per tile reaches the console.
-        Defaults to output_root/logs (or existing_data_root/logs if
-        output_root isn't set, or './tile_logs' as a last resort) when
-        left None and max_workers > 1. Ignored entirely when
-        max_workers == 1, where output still streams live as before.
+        one-line start/done/error summary per tile reaches the console
+        (that per-tile summary is printed from inside the WORKER process,
+        with flush=True -- a worker's stdout is a pipe, not a TTY, so
+        without an explicit flush those lines can sit unseen for a long
+        time even though the tile finished). The main process ALSO prints
+        its own "[done/total, elapsed, ~remaining] tile: status" line for
+        every tile as it completes (success, skip, or failure) -- this one
+        runs in the driving process itself, so it's always visible
+        regardless of worker-side buffering, and is what actually answers
+        "how far along is this run". Defaults to output_root/logs (or
+        existing_data_root/logs if output_root isn't set, or
+        './tile_logs' as a last resort) when left None and max_workers > 1.
+        Ignored entirely when max_workers == 1, where output still streams
+        live as before.
     :param grid_csv: path to a CSV with a Tile_ID column (defaults to
         data/CH_FORCE_Grids.csv) restricting processing to only the grid
         tiles listed there -- see discover_tiles(). Pass None to process
@@ -1132,6 +1141,16 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
         print(f"Processing tiles with max_workers={max_workers} "
               f"(dask_threads_per_worker={dask_threads_per_worker})")
         print(f"Per-tile logs: {log_dir}")
+        total_tiles = len(tiles)
+        done_tiles = 0
+        run_start = time.time()
+
+        def _progress():
+            elapsed_min = (time.time() - run_start) / 60
+            eta = (f", ~{elapsed_min / done_tiles * (total_tiles - done_tiles):.1f} min remaining"
+                   if 0 < done_tiles < total_tiles else "")
+            return f"[{done_tiles}/{total_tiles}, {elapsed_min:.1f} min elapsed{eta}]"
+
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(
@@ -1151,12 +1170,17 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
                 except Exception as e:
                     # Worker process crashed outright (e.g. OOM kill) rather
                     # than raising cleanly inside _process_one_tile.
-                    print(f"  Tile {fallback_id} failed hard: {type(e).__name__}: {e}")
+                    done_tiles += 1
+                    print(f"  {_progress()} {fallback_id}: failed hard: {type(e).__name__}: {e}")
                     continue
+                done_tiles += 1
                 if err:
-                    print(f"  Skipping tile {tile_id}: {err}")
+                    print(f"  {_progress()} {tile_id}: skipped -- {err}")
                 elif tile_out:
                     tile_output_dirs.append(tile_out)
+                    print(f"  {_progress()} {tile_id}: done -- {tile_out}")
+                else:
+                    print(f"  {_progress()} {tile_id}: done (no output)")
 
     if mosaic and output_root and disco_model is not None and tile_output_dirs:
         mosaic_dir = os.path.join(output_root, "mosaic")

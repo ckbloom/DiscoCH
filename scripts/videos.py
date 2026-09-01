@@ -656,15 +656,16 @@ def plot_temporal_distribution(data, output=None):
 
 
 if __name__ == '__main__':
-
-    folder = r'B:\bloomc\DiscoCH_2026_08_03\FORCE\output\2026\mosaic' # 'B:\bloomc\DiscoCH_2026_08_03\FORCE\output\DiscoCH_FORCE_2026'
-    shapefile_ = '../data/example_extents/Bounding_Box_SH.shp'
-    output_ = '../output/examples/2026_08_17/sh'
-    output_video = '../output/examples/2026_08_17/gifs/discoloration_timelapse_sh.gif'
+    location = 'Genf'
+    folder = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\output\2026\DiscoCH_2026_08_14"
+    # 'B:\bloomc\DiscoCH_2026_08_03\FORCE\output\DiscoCH_FORCE_2026'
+    shapefile_ = f'../data/example_extents/Bounding_Box_{location}.shp'
+    output_ = f'../output/examples/2026_08_21/{location}'
+    output_video = f'../output/examples/2026_08_21/gifs/discoloration_timelapse_{location}.gif'
     dpi_ = 300
     fps_ = 1
     nodata_val = 65535
     colors = ['#0A2F1F', '#228B22', '#5EAC2A', '#9ACD32', '#FFFF00'] # ['#3A4F41', '#607D6B', '#9DB28C', '#D1C78D', '#E6D385']
 
-    # process_examples(data_folder=folder, extent_loc=shapefile_, dpi=dpi_, output=output_, color_ramp=colors)
+    process_examples(data_folder=folder, extent_loc=shapefile_, dpi=dpi_, output=output_, color_ramp=colors)
     make_video_or_gif(output_, fps_, output_video, start_date='2026-06-01', end_date='2026-08-15')
