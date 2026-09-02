@@ -21,6 +21,20 @@ pixel first. See _stepwise_series() for exactly what it simulates and
 its one simplifying assumption. stepwise=False (the default) is the
 plot's original, unchanged full-archive behavior -- stepwise is strictly
 additive, never required.
+
+print_effective_bandwidth=True prints, for every output date, the
+*realized* smoothing the RBF ensemble actually applied at that point --
+see effective_bandwidth_stats() -- rather than the nominal rbf_sigma
+values requested. The same rbf_sigma tuple doesn't yield the same
+smoothness on sparse vs. dense data (e.g. 2018 vs. 2026): with few real
+observations nearby, the "smoother" degenerates toward interpolating a
+couple of points; with many, it's a genuine local average. This
+diagnostic is how you'd measure that gap directly, e.g. to pick per-year
+rbf_sigma values that reproduce a *matched* effective bandwidth instead
+of just eyeballing which curve "looks" similarly smooth. Alongside that,
+it also prints local_rmse -- how far the fitted curve sits from the real
+(despiked) observations feeding it at that point -- as an (in-sample,
+optimistic) sense of fit quality at each step.
 """
 
 from datetime import date, timedelta
@@ -33,6 +47,7 @@ from src.disco_ch.force_tsi import (
     load_tss_pixel,
     despike,
     rbf_interpolate,
+    rbf_cutoff_radius,
     output_dates_from_range,
 )
 from src.disco_ch.force_tsi_stepwise import DEFAULT_WAIT_DAYS, recommended_wait_days
@@ -49,6 +64,124 @@ def find_sample_pixel(cube, min_obs=10):
         raise ValueError(f"No pixel found with at least {min_obs} valid observations")
     row, col = candidates[len(candidates) // 2]
     return int(row), int(col)
+
+
+def effective_bandwidth_stats(dates, series, output_dates, rbf_sigma, rbf_cutoff=0.95):
+    """
+    For one pixel's (already despiked) series, computes -- at every output
+    date -- the ACTUAL effective bandwidth/degrees of freedom the RBF
+    ensemble achieves, given the real observation density it's fed there.
+    This is what makes the same nominal rbf_sigma produce different real
+    smoothing on sparse vs. dense data: the requested sigmas describe a
+    kernel *shape*, but how much genuine averaging that kernel performs
+    depends entirely on how many real observations happen to fall inside
+    it at each point in time.
+
+    Reproduces force_tsi.rbf_interpolate()'s own per-observation weighting
+    exactly (each sigma's Gaussian, truncated at its own rbf_cutoff_radius,
+    summed across sigmas) for one output date at a time, then summarizes
+    those weights instead of immediately collapsing them into one averaged
+    value:
+
+      - eff_dof: Kish's effective sample size, (sum w)^2 / sum(w^2) --
+        "how many independent observations this output value is really
+        averaging over", regardless of the nominal window width. A value
+        near 1 means the output is essentially just copying one nearby
+        observation (no real smoothing achieved); higher values mean
+        genuine averaging over several independent points.
+      - eff_bandwidth_days: the weighted RMS distance (days) of
+        contributing observations from the output date -- the *realized*
+        temporal spread of the smoothing actually applied, as opposed to
+        the nominal sigma(s) requested.
+      - local_rmse: the weighted RMS difference (in VI units) between
+        this output date's fitted (ensemble) value and the real nearby
+        observations that fed it -- i.e. how far off the RBF curve is
+        from the actual data at this point. NOTE: this is an IN-SAMPLE
+        residual (computed from the same weighted window the fit itself
+        used), not a held-out/cross-validated error, so it's optimistic
+        -- especially where eff_dof is low, since a fit hugging just one
+        or two nearby points will trivially look like a near-perfect
+        match to them. Still directly comparable across pixels/years
+        since it always uses the exact same weighting the ensemble
+        applies.
+
+    :param series: this pixel's cleaned 1D series (n_dates,), e.g.
+        cleaned[:, row, col] from despike() -- also what "actual data" in
+        local_rmse is measured against (so points despike() already
+        removed as outliers don't inflate it).
+    :return: list of dicts, one per output date, each
+        {"date", "n_obs", "eff_dof", "eff_bandwidth_days", "rbf_value",
+        "local_rmse"} -- all but "date"/"n_obs" are NaN when no real
+        observation falls within any sigma's cutoff radius
+        (rbf_interpolate would also output NaN there).
+    """
+    ordinals = np.array([d.toordinal() for d in dates], dtype="float64")
+    valid = ~np.isnan(series)
+
+    sigmas = np.asarray(rbf_sigma, dtype="float64")
+    radii = np.array([rbf_cutoff_radius(s, rbf_cutoff) for s in sigmas])
+    max_radius = radii.max()
+
+    nan_entry = lambda od, n_obs: {
+        "date": od, "n_obs": n_obs, "eff_dof": np.nan,
+        "eff_bandwidth_days": np.nan, "rbf_value": np.nan, "local_rmse": np.nan,
+    }
+
+    stats = []
+    for od in output_dates:
+        target = od.toordinal()
+        idx = np.where((np.abs(ordinals - target) <= max_radius) & valid)[0]
+        if idx.size == 0:
+            stats.append(nan_entry(od, 0))
+            continue
+
+        deltas = ordinals[idx] - target
+        weight = np.exp(-0.5 * (deltas[None, :] / sigmas[:, None]) ** 2)
+        within = np.abs(deltas)[None, :] <= radii[:, None]
+        weight = np.where(within, weight, 0.0).sum(axis=0)  # combined ensemble weight per obs
+
+        wsum = weight.sum()
+        if wsum <= 0:
+            stats.append(nan_entry(od, int(idx.size)))
+            continue
+
+        values = series[idx].astype("float64")
+        fitted = np.sum(weight * values) / wsum
+        eff_dof = wsum ** 2 / np.sum(weight ** 2)
+        eff_bandwidth = np.sqrt(np.sum(weight * deltas ** 2) / wsum)
+        local_rmse = np.sqrt(np.sum(weight * (values - fitted) ** 2) / wsum)
+        stats.append({
+            "date": od, "n_obs": int(idx.size),
+            "eff_dof": float(eff_dof), "eff_bandwidth_days": float(eff_bandwidth),
+            "rbf_value": float(fitted), "local_rmse": float(local_rmse),
+        })
+
+    return stats
+
+
+def _print_effective_bandwidth(dates, cleaned_series, output_dates, rbf_sigma, rbf_cutoff):
+    stats = effective_bandwidth_stats(dates, cleaned_series, output_dates, rbf_sigma, rbf_cutoff)
+    print(f"Effective bandwidth/dof/local RMSE per output date (rbf_sigma={rbf_sigma}, rbf_cutoff={rbf_cutoff}):")
+    for s in stats:
+        if np.isnan(s["eff_dof"]):
+            print(f"  {s['date']}: n_obs={s['n_obs']:3d}  (no data within cutoff radius)")
+        else:
+            print(f"  {s['date']}: n_obs={s['n_obs']:3d}  eff_dof={s['eff_dof']:5.2f}  "
+                  f"eff_bandwidth={s['eff_bandwidth_days']:6.1f}d  local_rmse={s['local_rmse']:7.4f}")
+
+    valid_stats = [s for s in stats if not np.isnan(s["eff_dof"])]
+    if valid_stats:
+        dofs = np.array([s["eff_dof"] for s in valid_stats])
+        bws = np.array([s["eff_bandwidth_days"] for s in valid_stats])
+        rmses = np.array([s["local_rmse"] for s in valid_stats])
+        overall_rmse = np.sqrt(np.mean(rmses ** 2))
+        print(f"Summary across {len(valid_stats)}/{len(stats)} output dates with data: "
+              f"eff_dof median={np.median(dofs):.2f} (range {dofs.min():.2f}-{dofs.max():.2f}), "
+              f"eff_bandwidth median={np.median(bws):.1f}d (range {bws.min():.1f}-{bws.max():.1f}d), "
+              f"local_rmse median={np.median(rmses):.4f} (range {rmses.min():.4f}-{rmses.max():.4f}), "
+              f"overall_rmse={overall_rmse:.4f}")
+    else:
+        print("Summary: no output date had any observation within the cutoff radius.")
 
 
 def _stepwise_series(dates, pixel_cube, output_dates, wait_days,
@@ -101,7 +234,8 @@ def plot_pixel(tss_path, row=None, col=None,
                 rbf_sigma=(10, 20, 30, 50), rbf_cutoff=0.95,
                 above_noise=3.0, below_noise=1.0,
                 show_components=True, title=None, output_path=None,
-                stepwise=False, wait_days=None, show_full_archive_comparison=True):
+                stepwise=False, wait_days=None, show_full_archive_comparison=True,
+                print_effective_bandwidth=False):
     """Plot one pixel's raw series, despiking, and RBF ensemble.
 
     If row/col are given, only a tiny window is read from disk -- this
@@ -130,6 +264,17 @@ def plot_pixel(tss_path, row=None, col=None,
         components, if show_components) are ALSO drawn, dimmed, for
         direct comparison against the stepwise curve. Set False for a
         stepwise-only view.
+    :param print_effective_bandwidth: if True, prints (to stdout) the
+        ACTUAL effective bandwidth/degrees of freedom the RBF ensemble
+        achieves at every output date for this pixel, given the real
+        observation density it's fed -- see effective_bandwidth_stats().
+        Use this to compare, e.g., a sparse 2018 pixel against a dense
+        2026 pixel: the same rbf_sigma doesn't produce the same realized
+        smoothing on both, and this is how you'd measure that gap (and
+        pick per-year sigmas that match a target effective bandwidth)
+        instead of just eyeballing which curve looks smoother. Each line
+        also prints local_rmse, the (in-sample) RMS gap between the
+        fitted curve and the real nearby observations at that point.
     :return: (fig, (row, col), dates, cube, cleaned, removed) -- the
         underlying arrays are returned too, in case you want to inspect
         them further in the notebook.
@@ -151,6 +296,9 @@ def plot_pixel(tss_path, row=None, col=None,
     removed_series = removed[:, local_row, local_col]
 
     output_dates = output_dates_from_range(date_range, int_day, doy_range)
+
+    if print_effective_bandwidth:
+        _print_effective_bandwidth(dates, cleaned_series, output_dates, rbf_sigma, rbf_cutoff)
 
     fig, ax = plt.subplots(figsize=(11, 5))
     date_arr = np.array(dates)

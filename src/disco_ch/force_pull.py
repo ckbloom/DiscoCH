@@ -50,6 +50,12 @@ from src.disco_ch.stac_pull import (
     _reproject_match_if_needed,
 )
 
+# Reused as-is for the stepwise VI/min-max export options below (see
+# update_vi_min_max_tsa()) -- same dynamic largest-power-of-10 scale factor
+# + dtype-min nodata sentinel convention as mask_and_scale_directory()'s own
+# output.
+from src.disco_ch.mask_and_scale_rasters import scale_and_save_as_int_from_da
+
 warnings.filterwarnings(
     "ignore",
     message="angle from rectified to skew grid parameter lost in conversion to CF",
@@ -461,10 +467,59 @@ def _recover_incomplete_apply(existing_data, year_of_interest, vi_date_maps, vi_
     gc.collect()
 
 
+def _export_stepwise_da(da, out_dir, vi, filename):
+    """Writes one already-aligned, single-date DataArray (a normalized VI
+    band, or a running vi_min/vi_max snapshot) out as a compact int16 tif
+    under out_dir/<vi>/<filename> -- see update_vi_min_max_tsa()'s
+    export_normalized_vi_dir/export_minmax_dir params.
+
+    Delegates entirely to mask_and_scale_rasters.scale_and_save_as_int_from_da():
+    same dynamic largest-power-of-10 scale factor (naturally 1 for the
+    already-scaled min/max, since their magnitude already fills most of
+    int16's range; naturally 10000 for a [0, 1] normalized VI) and the
+    same dtype-min nodata sentinel, rather than a second, bespoke int16
+    convention living here.
+
+    A date with zero valid pixels anywhere in `da` (e.g. the very first
+    processed date, before vi_min/vi_max have diverged, makes a
+    normalized VI 0/0 = NaN everywhere) is skipped with a printed note
+    rather than raising -- see scale_and_save_as_int_from_da()'s own
+    "No valid data found" ValueError.
+    """
+    vi_dir = os.path.join(out_dir, vi)
+    os.makedirs(vi_dir, exist_ok=True)
+    out_path = os.path.join(vi_dir, filename)
+    try:
+        scale_and_save_as_int_from_da(da, out_path)
+    except ValueError as e:
+        print(f"    Skipping export {out_path}: {e}")
+
+
+def _in_export_range(date_str, export_start_date, export_end_date):
+    """Whether `date_str` ('YYYY-MM-DD') falls in [export_start_date,
+    export_end_date] (either/both None = unbounded on that side) -- same
+    inclusive plain-string comparison dates_to_process() uses for
+    start_date/end_date, but kept separate: this only decides which
+    ALREADY-WALKED date's vi/min-max snapshot gets WRITTEN OUT (see
+    update_vi_min_max_tsa()'s export_start_date/export_end_date), not
+    which dates get walked in the first place -- the running min/max is a
+    single cumulative snapshot, not a history (see
+    _recover_incomplete_apply()'s docstring), so reconstructing a correct
+    per-date export still requires walking every date from the start of
+    the season in order; this window only narrows what gets written."""
+    if export_start_date is not None and date_str < export_start_date:
+        return False
+    if export_end_date is not None and date_str > export_end_date:
+        return False
+    return True
+
+
 def update_vi_min_max_tsa(dates_to_run, vi_date_maps, vi_stacks, year_of_interest,
                            existing_data, forest_mask_da, template, bbox,
                            disco_model=None, output_dir=None, plot_results=True,
-                           model_months=None, scale_factors=None, vi_keys=None):
+                           model_months=None, scale_factors=None, vi_keys=None,
+                           export_normalized_vi_dir=None, export_minmax_dir=None,
+                           export_start_date=None, export_end_date=None, run_apply=True):
     """
     TSA equivalent of update_vi_min_max(). Walks each date in
     `dates_to_run`, updates the running per-VI min/max, and -- for dates
@@ -487,6 +542,42 @@ def update_vi_min_max_tsa(dates_to_run, vi_date_maps, vi_stacks, year_of_interes
         the canonical names are used here; any file_token mapping is
         irrelevant at this point since vi_date_maps/vi_stacks are already
         keyed by canonical name.
+    :param export_normalized_vi_dir: if given, every VI's normalized value
+        ((value - running min) / (running max - running min), same as
+        normalize_vis_tsa()'s own formula) is written out per date as its
+        own single-band int16 tif, to
+        export_normalized_vi_dir/<vi>/<vi>_<date>_NORM.tif -- for EVERY
+        date/VI processed, independent of whether that date is complete
+        enough (is_complete_date) or in-season (model_months) enough to
+        run the disco model itself. None (default) skips this entirely.
+    :param export_minmax_dir: if given, the running vi_min/vi_max snapshot
+        as of each processed date is written out per VI as its own
+        single-band int16 tif pair, to
+        export_minmax_dir/<vi>/<vi>_min_<date>.tif and .../<vi>_max_<date>.tif
+        -- a full per-date history, unlike save_minmax_rasters()'s single
+        cumulative snapshot (existing_data), which is overwritten in place
+        on every date and so only ever reflects the LATEST min/max. None
+        (default) skips this entirely.
+    :param export_start_date, export_end_date: optional 'YYYY-MM-DD'
+        bounds (inclusive) restricting which dates actually get WRITTEN by
+        export_normalized_vi_dir/export_minmax_dir -- see
+        _in_export_range(). Independent of `dates_to_run` itself (which
+        dates get walked/have their running min/max updated at all --
+        that's decided by the caller's own start_date/end_date) and of
+        `run_apply` (whether the disco model runs) -- so you can walk a
+        full season once, skip the (often much slower) model apply step
+        via run_apply=False, and still get exports for only the
+        sub-window you actually care about, without re-running anything.
+        None (default, either/both) exports every walked date.
+    :param run_apply: if False, the disco-model normalize+apply step is
+        skipped for every date regardless of `disco_model`/`model_months`
+        -- running min/max still updates (and export_normalized_vi_dir/
+        export_minmax_dir still export) exactly as normal. Distinct from
+        just passing disco_model=None: this lets a caller keep passing an
+        already-loaded model (e.g. from a wrapper that always supplies
+        one) while still being able to turn the actual apply step on/off
+        per call. True (default) preserves the original behavior (apply
+        runs whenever disco_model is given and a date qualifies).
     """
     vi_keys = list(_resolve_vi_keys(vi_keys).keys())
     scale_factors = scale_factors or {}
@@ -547,6 +638,19 @@ def update_vi_min_max_tsa(dates_to_run, vi_date_maps, vi_stacks, year_of_interes
             if existing_data is not None:
                 save_minmax_rasters({k: vi_min[k]}, {k: vi_max[k]}, year_of_interest, existing_data)
 
+            export_this_date = _in_export_range(date_str, export_start_date, export_end_date)
+
+            if export_minmax_dir is not None and export_this_date:
+                _export_stepwise_da(vi_min[k], export_minmax_dir, k, f"{k}_min_{date_str}.tif")
+                _export_stepwise_da(vi_max[k], export_minmax_dir, k, f"{k}_max_{date_str}.tif")
+
+            if export_normalized_vi_dir is not None and export_this_date:
+                vi_aligned_loaded = vi_aligned.load()
+                normalized_k = (vi_aligned_loaded - vi_min[k]) / (vi_max[k] - vi_min[k])
+                normalized_k = normalized_k.where(np.isfinite(normalized_k), np.nan)
+                normalized_k.rio.write_crs(vi_min[k].rio.crs, inplace=True)
+                _export_stepwise_da(normalized_k, export_normalized_vi_dir, k, f"{k}_{date_str}_NORM.tif")
+
         # Record this date as processed regardless of whether it hit every
         # VI, so a later resume doesn't re-scan it.
         if existing_data is not None:
@@ -565,12 +669,15 @@ def update_vi_min_max_tsa(dates_to_run, vi_date_maps, vi_stacks, year_of_interes
         is_complete_date = len(date_present_in) == len(vi_keys)
         date_month = datetime.strptime(date_str, "%Y-%m-%d").month
         should_run_model = (
-            disco_model is not None
+            run_apply
+            and disco_model is not None
             and is_complete_date
             and (model_months is None or date_month in model_months)
         )
 
-        if disco_model is not None and not is_complete_date:
+        if not run_apply:
+            pass  # apply step disabled for this whole call -- nothing to log per date
+        elif disco_model is not None and not is_complete_date:
             print(f"  Skipping model: date {date_str} missing from "
                   f"{sorted(set(vi_keys) - set(date_present_in))}")
         elif disco_model is not None and not should_run_model:
@@ -627,7 +734,9 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
                       existing_data="minmax_tsa", output_dir=None, disco_model=None,
                       plot_results=True, model_months=None,
                       vi_pattern_template="{year}*_{vi}_TSS.tif", scale_factors=None,
-                      start_date=None, end_date=None, verbose=False, vi_keys=None):
+                      start_date=None, end_date=None, verbose=False, vi_keys=None,
+                      export_normalized_vi_dir=None, export_minmax_dir=None,
+                      export_start_date=None, export_end_date=None, run_apply=True):
     """
     End-to-end TSA pipeline: discover VI files/dates -> filter to unprocessed
     dates in `year_of_interest` (optionally windowed to [start_date,
@@ -688,6 +797,9 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
         present in every one of these VIs to run (see is_complete_date in
         update_vi_min_max_tsa), so passing a shorter list also changes
         which dates are model-eligible.
+    :param export_normalized_vi_dir, export_minmax_dir, export_start_date,
+        export_end_date, run_apply: see update_vi_min_max_tsa() -- all
+        forwarded as-is.
     """
     vi_keys = vi_keys if vi_keys is not None else VI_KEYS
 
@@ -747,6 +859,10 @@ def run_tsa_workflow(tsa_dir, year_of_interest, forest_mask_path, template_path,
             disco_model=disco_model, output_dir=output_dir,
             plot_results=plot_results, model_months=model_months,
             scale_factors=scale_factors, vi_keys=vi_keys,
+            export_normalized_vi_dir=export_normalized_vi_dir,
+            export_minmax_dir=export_minmax_dir,
+            export_start_date=export_start_date, export_end_date=export_end_date,
+            run_apply=run_apply,
         )
     finally:
         for vi, stack in vi_stacks.items():
@@ -907,7 +1023,9 @@ def _process_one_tile(tile_path, year_of_interest, forest_mask_path, template_pa
                        existing_data_root, output_root, disco_model, model_months,
                        vi_pattern_template, scale_factors, plot_tile_results,
                        start_date, end_date, verbose, dask_threads_per_worker,
-                       vi_keys=None, log_dir=None):
+                       vi_keys=None, log_dir=None,
+                       export_normalized_vi_root=None, export_minmax_root=None,
+                       export_start_date=None, export_end_date=None, run_apply=True):
     """
     Runs run_tsa_workflow() for a single tile. Defined at module level (not
     nested) so it's picklable for ProcessPoolExecutor.
@@ -927,6 +1045,14 @@ def _process_one_tile(tile_path, year_of_interest, forest_mask_path, template_pa
         single done/error line per tile are still printed to the real
         console. Pass None to disable redirection and print live, as before
         (the right choice when running a single tile / max_workers=1).
+    :param export_normalized_vi_root, export_minmax_root: parent folders for
+        the stepwise exports (see update_vi_min_max_tsa()) -- this tile
+        gets its own <root>/<tile_id> subfolder, mirroring
+        existing_data_root/output_root. None (default, for either) skips
+        that export for this tile.
+    :param export_start_date, export_end_date, run_apply: see
+        update_vi_min_max_tsa() -- forwarded as-is, identically to every
+        tile.
     Returns (tile_id, tile_output_dir_or_None, error_message_or_None).
     """
     # Cap thread usage inside this worker process before any raster I/O
@@ -974,6 +1100,9 @@ def _process_one_tile(tile_path, year_of_interest, forest_mask_path, template_pa
             if tile_output_dir:
                 os.makedirs(tile_output_dir, exist_ok=True)
 
+            tile_export_vi_dir = os.path.join(export_normalized_vi_root, tile_id) if export_normalized_vi_root else None
+            tile_export_minmax_dir = os.path.join(export_minmax_root, tile_id) if export_minmax_root else None
+
             try:
                 run_tsa_workflow(
                     tsa_dir=tile_path,
@@ -992,6 +1121,10 @@ def _process_one_tile(tile_path, year_of_interest, forest_mask_path, template_pa
                     end_date=end_date,
                     verbose=verbose,
                     vi_keys=vi_keys,
+                    export_normalized_vi_dir=tile_export_vi_dir,
+                    export_minmax_dir=tile_export_minmax_dir,
+                    export_start_date=export_start_date, export_end_date=export_end_date,
+                    run_apply=run_apply,
                 )
             except Exception as e:
                 # Surface the error with the tile ID attached rather than
@@ -1028,7 +1161,9 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
                             plot_tile_results=False, plot_mosaic_results=True,
                             mosaic=True, start_date=None, end_date=None, verbose=False,
                             max_workers=1, dask_threads_per_worker=2, vi_keys=None,
-                            log_dir=None, grid_csv=DEFAULT_FORCE_GRID_CSV):
+                            log_dir=None, grid_csv=DEFAULT_FORCE_GRID_CSV,
+                            export_normalized_vi_root=None, export_minmax_root=None,
+                            export_start_date=None, export_end_date=None, run_apply=True):
     """
     Runs run_tsa_workflow() independently over every tile folder under
     `root_dir`, then (optionally) mosaics the per-date model outputs into
@@ -1112,6 +1247,27 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
         data/CH_FORCE_Grids.csv) restricting processing to only the grid
         tiles listed there -- see discover_tiles(). Pass None to process
         every tile folder found under `root_dir`, unfiltered.
+    :param export_normalized_vi_root, export_minmax_root: parent folders
+        for the stepwise per-date exports (see
+        update_vi_min_max_tsa()'s export_normalized_vi_dir/
+        export_minmax_dir) -- each tile writes into its own
+        <root>/<tile_id> subfolder, same convention as
+        existing_data_root/output_root. None (default, for either) skips
+        that export for every tile.
+    :param export_start_date, export_end_date: optional 'YYYY-MM-DD'
+        bounds (inclusive), applied identically to every tile, narrowing
+        which already-processed dates actually get WRITTEN by
+        export_normalized_vi_root/export_minmax_root -- independent of
+        start_date/end_date (which control which dates get processed at
+        all) and of run_apply. See update_vi_min_max_tsa()'s
+        export_start_date/export_end_date.
+    :param run_apply: if False, skips the disco-model apply step for
+        every tile/date regardless of `disco_model`/`model_months` --
+        running min/max still updates, and the two exports above still
+        run, exactly as normal. Lets you get a full-season min/max +
+        stepwise VI/min-max export pass without paying for (or writing)
+        any Disco_Proba_*.tif model output. True (default) preserves the
+        original behavior. See update_vi_min_max_tsa()'s run_apply.
     """
     vi_keys = vi_keys if vi_keys is not None else VI_KEYS
 
@@ -1132,6 +1288,10 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
                 vi_pattern_template, scale_factors, plot_tile_results,
                 start_date, end_date, verbose, dask_threads_per_worker=None,
                 vi_keys=vi_keys,
+                export_normalized_vi_root=export_normalized_vi_root,
+                export_minmax_root=export_minmax_root,
+                export_start_date=export_start_date, export_end_date=export_end_date,
+                run_apply=run_apply,
             )
             if err:
                 print(f"  Skipping tile {tile_id}: {err}")
@@ -1159,6 +1319,8 @@ def run_tsa_workflow_tiled(root_dir, year_of_interest, forest_mask_path, templat
                     model_months, vi_pattern_template, scale_factors,
                     plot_tile_results, start_date, end_date, verbose,
                     dask_threads_per_worker, vi_keys, log_dir,
+                    export_normalized_vi_root, export_minmax_root,
+                    export_start_date, export_end_date, run_apply,
                 ): tile_path
                 for tile_path in tiles
             }

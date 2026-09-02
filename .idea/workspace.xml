@@ -4,15 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Implemented a 10 day interpolation into STAC and FORCE pipelines">
-      <change afterPath="$PROJECT_DIR$/notebooks/vegetation_index_2026.ipynb" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/disco_ch/mask_and_scale_rasters.py" afterDir="false" />
+    <list default="true" id="2504120c-c2a5-434b-ad15-6761c0678989" name="Changes" comment="Updated code.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/notebooks/DiscoCH_2026_vs_2018.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/DiscoCH_2026_vs_2018.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/videos.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/videos.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/disco_ch/force_pull.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/force_pull.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/disco_ch/force_tsi_batch.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/force_tsi_batch.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/stac_pull.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/disco_ch/force_tsi_plot.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/force_tsi_plot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/disco_ch/mask_and_scale_rasters.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/disco_ch/mask_and_scale_rasters.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -63,6 +60,7 @@
     "Python.force_dirigent.executor": "Run",
     "Python.interpolate.executor": "Run",
     "Python.mask_and_scale_rasters.executor": "Run",
+    "Python.merge_multiyear_tss.executor": "Run",
     "Python.mosaic_vi_tiles.executor": "Run",
     "Python.normalize_vi_batch.executor": "Run",
     "Python.plot_pixel_comparison.executor": "Run",
@@ -103,54 +101,6 @@
     </key>
   </component>
   <component name="RunManager" selected="Python.mosaic_vi_tiles">
-    <configuration name="clip_rasters" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="DiscoCH" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/disco_ch" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="DEBUG_JUST_MY_CODE" value="false" />
-      <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/disco_ch/clip_rasters.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <configuration name="diff_vi_years" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="DiscoCH" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/disco_ch" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="DEBUG_JUST_MY_CODE" value="false" />
-      <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/disco_ch/diff_vi_years.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
     <configuration name="mask_and_scale_rasters" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="DiscoCH" />
       <option name="ENV_FILES" value="" />
@@ -167,6 +117,30 @@
       <option name="DEBUG_JUST_MY_CODE" value="false" />
       <option name="RUN_TOOL" value="" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/disco_ch/mask_and_scale_rasters.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="merge_multiyear_tss" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="DiscoCH" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/scripts" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <option name="RUN_TOOL" value="" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/merge_multiyear_tss.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -223,20 +197,44 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <configuration name="test" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="DiscoCH" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <option name="RUN_TOOL" value="" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/test.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <list>
+      <item itemvalue="Python.merge_multiyear_tss" />
+      <item itemvalue="Python.test" />
       <item itemvalue="Python.mosaic_vi_tiles" />
       <item itemvalue="Python.normalize_vi_batch" />
-      <item itemvalue="Python.clip_rasters" />
-      <item itemvalue="Python.diff_vi_years" />
       <item itemvalue="Python.mask_and_scale_rasters" />
     </list>
     <recent_temporary>
       <list>
         <item itemvalue="Python.mosaic_vi_tiles" />
-        <item itemvalue="Python.normalize_vi_batch" />
+        <item itemvalue="Python.test" />
         <item itemvalue="Python.mask_and_scale_rasters" />
-        <item itemvalue="Python.clip_rasters" />
-        <item itemvalue="Python.diff_vi_years" />
+        <item itemvalue="Python.merge_multiyear_tss" />
+        <item itemvalue="Python.normalize_vi_batch" />
       </list>
     </recent_temporary>
   </component>
@@ -579,7 +577,15 @@
       <option name="project" value="LOCAL" />
       <updated>1787153805185</updated>
     </task>
-    <option name="localTasksCounter" value="41" />
+    <task id="LOCAL-00041" summary="Updated code.">
+      <option name="closed" value="true" />
+      <created>1788243463753</created>
+      <option name="number" value="00041" />
+      <option name="presentableId" value="LOCAL-00041" />
+      <option name="project" value="LOCAL" />
+      <updated>1788243463753</updated>
+    </task>
+    <option name="localTasksCounter" value="42" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -643,6 +649,7 @@
     <MESSAGE value="Updated documentation" />
     <MESSAGE value="Updated STAC pull for V200 with additional bands available" />
     <MESSAGE value="Implemented a 10 day interpolation into STAC and FORCE pipelines" />
-    <option name="LAST_COMMIT_MESSAGE" value="Implemented a 10 day interpolation into STAC and FORCE pipelines" />
+    <MESSAGE value="Updated code." />
+    <option name="LAST_COMMIT_MESSAGE" value="Updated code." />
   </component>
 </project>

@@ -17,6 +17,10 @@ Pipeline per input raster:
        up to 2 decimals without overflow) and write to disk with LZW
        compression.
 
+If mask_path is None, step 3 (masking) is skipped, but each raster is still
+reprojected to target_crs (on its own native resolution/extent, since there's
+no mask grid to match onto) before being scaled and saved.
+
 Requires: rioxarray, rasterio, xarray, numpy
 """
 
@@ -110,6 +114,16 @@ def load_mask_in_target_crs(mask_path, target_crs=TARGET_CRS):
     return mask_da
 
 
+def reproject_to_crs(da, target_crs=TARGET_CRS, resampling=Resampling.bilinear):
+    """
+    Reprojects `da` to target_crs on its own native resolution/extent (no
+    mask grid to match onto). Used when no mask is supplied.
+    """
+    if da.rio.crs is not None and da.rio.crs.to_string() == target_crs:
+        return da
+    return da.rio.reproject(target_crs, resampling=resampling)
+
+
 def mask_and_reproject_match(da, mask_da, resampling=Resampling.bilinear):
     """
     Reproject-matches `da` onto `mask_da`'s grid (CRS, resolution, transform,
@@ -161,8 +175,10 @@ def mask_and_scale_directory(
     ----------
     input_dir : str
         Folder containing the .tif files to process.
-    mask_path : str
+    mask_path : str or None
         Path to the binary mask raster (1 = keep, anything else = discard).
+        If None, masking is skipped, but each raster is still reprojected
+        to target_crs (on its own native resolution/extent) before scaling.
     output_dir : str
         Folder to write the masked + scaled outputs to.
     dtype : str
@@ -180,8 +196,12 @@ def mask_and_scale_directory(
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Loading mask '{mask_path}' and reprojecting to {target_crs} ...")
-    mask_da = load_mask_in_target_crs(mask_path, target_crs=target_crs)
+    mask_da = None
+    if mask_path is not None:
+        print(f"Loading mask '{mask_path}' and reprojecting to {target_crs} ...")
+        mask_da = load_mask_in_target_crs(mask_path, target_crs=target_crs)
+    else:
+        print(f"No mask provided -- reprojecting to {target_crs} without masking.")
 
     tif_files = sorted(
         f for f in os.listdir(input_dir) if f.lower().endswith((".tif", ".tiff"))
@@ -197,8 +217,11 @@ def mask_and_scale_directory(
         print(f"Processing {fname} ...")
 
         da = rxr.open_rasterio(in_path, masked=True)
-        masked = mask_and_reproject_match(da, mask_da, resampling=resampling)
-        result = scale_and_save_as_int_from_da(masked, out_path, dtype=dtype)
+        if mask_da is not None:
+            processed = mask_and_reproject_match(da, mask_da, resampling=resampling)
+        else:
+            processed = reproject_to_crs(da, target_crs=target_crs, resampling=resampling)
+        result = scale_and_save_as_int_from_da(processed, out_path, dtype=dtype)
         results.append(result)
         print(f"  -> wrote {out_path} (scale_factor={result[1]}, nodata={result[2]})")
 
@@ -208,9 +231,9 @@ def mask_and_scale_directory(
 if __name__ == "__main__":
     # Edit these paths and call the function directly - no CLI args needed.
     # input_dir = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\output\2026\mosaic"
-    input_dir = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\level5_norm\2026\mosaic\CCI"
-    mask_path = r"C:\Users\bloomcol\Desktop\DiscoCH_Mask_2026_2625EVIdiff1500_MogliBeech_swissEOwald_wm75.tif"
-    output_dir = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\output\2026\DiscoCH_2026_08_14_CCI"
+    input_dir = r"F:\cb_overflow\2026_09_01_FORCE_Backup\FORCE\level5_norm\2026\mosaic\CCI"
+    mask_path = None # r"C:\Users\bloomcol\Desktop\DiscoCH_Mask_2026_2625EVIdiff1500_CCImingt1000_MogliBeech_swissEOwald_wm75.tif"
+    output_dir = r"F:\cb_overflow\2026_09_01_FORCE_Backup\FORCE\output\2026\DiscoCH_unclipped_2026_08_14_CCI"
 
     mask_and_scale_directory(
         input_dir=input_dir,
