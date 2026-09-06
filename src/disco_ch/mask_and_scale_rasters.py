@@ -163,6 +163,7 @@ def mask_and_scale_directory(
     dtype="int16",
     target_crs=TARGET_CRS,
     resampling=Resampling.bilinear,
+    overwrite=False,
 ):
     """
     For every .tif/.tiff in input_dir:
@@ -189,6 +190,9 @@ def mask_and_scale_directory(
         Resampling method used when reproject-matching the *data* rasters
         (the mask itself always uses nearest-neighbor). Use
         Resampling.nearest instead if your data is categorical.
+    overwrite : bool
+        If False (default), files already present in output_dir are skipped
+        instead of being reprocessed.
 
     Returns
     -------
@@ -214,6 +218,11 @@ def mask_and_scale_directory(
     for fname in tif_files:
         in_path = os.path.join(input_dir, fname)
         out_path = os.path.join(output_dir, fname)
+
+        if not overwrite and os.path.exists(out_path):
+            print(f"Skipping {fname} (already exists at {out_path}).")
+            continue
+
         print(f"Processing {fname} ...")
 
         da = rxr.open_rasterio(in_path, masked=True)
@@ -231,9 +240,9 @@ def mask_and_scale_directory(
 if __name__ == "__main__":
     # Edit these paths and call the function directly - no CLI args needed.
     # input_dir = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\output\2026\mosaic"
-    input_dir = r"F:\cb_overflow\2026_09_01_FORCE_Backup\FORCE\level5_norm\2026\mosaic\CCI"
+    input_dir = r"F:\cb_overflow\2026_09_02_FORCE\FORCE\DiscoCH_rbf_10_20_30\output\level5norm\2026\mosaic\CCI"
     mask_path = None # r"C:\Users\bloomcol\Desktop\DiscoCH_Mask_2026_2625EVIdiff1500_CCImingt1000_MogliBeech_swissEOwald_wm75.tif"
-    output_dir = r"F:\cb_overflow\2026_09_01_FORCE_Backup\FORCE\output\2026\DiscoCH_unclipped_2026_08_14_CCI"
+    output_dir = r"F:\cb_overflow\2026_09_01_FORCE_Backup\FORCE\output\2026\CCI_2026_08_14_RBF_10_20_30_unclipped"
 
     mask_and_scale_directory(
         input_dir=input_dir,

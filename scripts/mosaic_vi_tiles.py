@@ -82,7 +82,7 @@ No command-line arguments -- just edit the config below and run:
 
 # Root directory containing the X####_Y#### tile folders, each holding
 # one multiband tif per VI.
-ROOT_DIR = r"F:\cb_overflow\2026_09_02_FORCE\FORCE\DiscoCH_rbf_10\output\level5norm\2026"
+ROOT_DIR = r"F:\cb_overflow\2026_09_02_FORCE\FORCE\DiscoCH_rbf_10_20_30\output\level5norm\2026"
 # r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\minmax\2026" # "B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\level5_norm\2026"
 
 # VIs to mosaic (looped one at a time -- band count/order only needs to
@@ -90,7 +90,7 @@ ROOT_DIR = r"F:\cb_overflow\2026_09_02_FORCE\FORCE\DiscoCH_rbf_10\output\level5n
 # file-naming token each VI actually uses in this archive's filenames
 # (only differs from the canonical name for some years -- see
 # force_pull.VI_KEYS).
-VI_LIST = ["CCI", "EVI", "NDMI", "CIRE", "NDVI"]
+VI_LIST = ["EVI", "NDMI", "CIRE", "NDVI"]  # CCI
 FILE_TOKENS = {"NDVI": "NDVI", "EVI": "EVI", "NDMI": "NDMI", "CIRE": "CIre", "CCI": "CCI"}
 YEAR = 2026
 
@@ -122,13 +122,13 @@ VI_PATTERN_TEMPLATE = "{vi}/{vi}_*_NORM.tif" if DATED_FILES_MODE else "{vi}_{yea
 SCRATCH_DIR = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\level5_norm\2026\temp"
 CLEANUP_SCRATCH = True  # delete each VI's extracted subfolder once its mosaics are written
 
-OUT_DIR = r"F:\cb_overflow\2026_09_02_FORCE\FORCE\DiscoCH_rbf_10\output\level5norm\2026\mosaic" # r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\mask\min\2026\mosaic"
+OUT_DIR = r"F:\cb_overflow\2026_09_02_FORCE\FORCE\DiscoCH_rbf_10_20_30\output\level5norm\2026\mosaic" # r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\mask\min\2026\mosaic"
 
 # Optional 'YYYY-MM-DD' bounds restricting which timesteps get
 # extracted/mosaicked -- None (default) processes every date found in
 # the archive.
 START_DATE = "2026-06-01"
-END_DATE = "2026-08-14"
+END_DATE = "2026-09-02"
 
 # nodata value written into gaps in the mosaic -- MUST match the source
 # tiles' own dtype/convention: DEFAULT_NODATA_INT16 (-9999) for int16

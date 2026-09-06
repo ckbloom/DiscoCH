@@ -411,7 +411,7 @@ def plot_example(data_loc, extent_shp, dpi, output, color_ramp=None):
     ds_web = ds_scaled.rio.reproject("EPSG:3857")
 
     # Cleanup outliers
-    final_ds = ds_web.where((ds_web >= 0) & (ds_web <= 1), np.nan)
+    final_ds = ds_web.where((ds_web >= 0) & (ds_web <= 10000), np.nan)
 
     if final_ds.isnull().all():
         print(f"Skipping {date_str}: Data is all NaN after filtering 0-1.")
@@ -656,16 +656,17 @@ def plot_temporal_distribution(data, output=None):
 
 
 if __name__ == '__main__':
-    location = 'Genf'
-    folder = r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\output\2026\DiscoCH_2026_08_14"
+    location = 'Hardwald'
+    dataset = "DiscoCH_rbf_10"  # "DiscoCH_rbf_10_20_30"
+    folder = r"F:\cb_overflow\2026_09_01_FORCE_Backup\FORCE\output\2026\DiscoCH_2026_08_14_CCI" # fr"F:\cb_overflow\2026_09_02_FORCE\FORCE\{dataset}\output\level5norm\2026\mosaic\CCI" # r"B:\bloomc\DiscoCH_2026_08_03\FORCE\FORCE\output\2026\DiscoCH_2026_08_14"
     # 'B:\bloomc\DiscoCH_2026_08_03\FORCE\output\DiscoCH_FORCE_2026'
     shapefile_ = f'../data/example_extents/Bounding_Box_{location}.shp'
-    output_ = f'../output/examples/2026_08_21/{location}'
-    output_video = f'../output/examples/2026_08_21/gifs/discoloration_timelapse_{location}.gif'
+    output_ = fr"F:\cb_overflow\2026_09_02_FORCE\FORCE\{dataset}\output\level5norm\2026\examples\CCI\tiles\{location}"
+    output_video = fr"F:\cb_overflow\2026_09_02_FORCE\FORCE\{dataset}\output\level5norm\2026\examples\CCI\gif\CCI_timelapse_{location}.gif"
     dpi_ = 300
     fps_ = 1
-    nodata_val = 65535
+    nodata_val = -32768 # 65535
     colors = ['#0A2F1F', '#228B22', '#5EAC2A', '#9ACD32', '#FFFF00'] # ['#3A4F41', '#607D6B', '#9DB28C', '#D1C78D', '#E6D385']
 
     process_examples(data_folder=folder, extent_loc=shapefile_, dpi=dpi_, output=output_, color_ramp=colors)
-    make_video_or_gif(output_, fps_, output_video, start_date='2026-06-01', end_date='2026-08-15')
+    make_video_or_gif(output_, fps_, output_video, start_date='2026-06-01', end_date='2026-09-02')
